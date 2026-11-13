@@ -962,6 +962,28 @@ body:is([data-route=manage-classes],[data-route=manage-subjects],[data-route=imp
 .grade-marks td:not(:first-child) { white-space:nowrap }
 .grade-paper-side .paper-student { border:2px solid #000; padding:8px; text-align:center }
 .paper-preview .school-paper { flex:none }
+.paper-attendance-calendar,.paper-attendance-daily { padding-inline:17px; }
+.paper-attendance-calendar .school-paper-head,.paper-attendance-daily .school-paper-head { min-height:94px; margin-bottom:6px }
+.paper-attendance-calendar .paper-meta,.paper-attendance-daily .paper-meta { margin-bottom:8px; font-weight:600 }
+.attendance-legend { flex-basis:100%; text-align:center; font-size:11px }
+.paper-attendance-calendar .school-paper-table { table-layout:fixed; }
+.paper-attendance-calendar .school-paper-table th,.paper-attendance-calendar .school-paper-table td { padding:2px 1px; line-height:1.12; }
+.paper-attendance-calendar .school-paper-table th:nth-child(1) { width:7mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(2) { width:18mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(3) { width:48mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(4) { width:22mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(5) { width:14mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(n+6) { font-size:9px; }
+.paper-attendance-calendar .school-paper-table th:has(.attendance-total) { width:10mm; overflow-wrap:normal; }
+.paper-attendance-calendar .school-paper-table td:nth-child(n+6) { white-space:pre-line; }
+.paper-attendance-calendar .school-paper-table td:first-child { white-space:nowrap; }
+.paper-attendance-calendar .school-paper-table td:nth-child(3),.paper-attendance-daily .school-paper-table td:nth-child(3) { text-align:right; padding-inline:4px; }
+.paper-preview:has(.paper-attendance-calendar,.paper-attendance-daily) { padding:8px; }
+dialog.attendance-print-dialog { width:min(1210px,calc(100vw - 26px)); }
+dialog.attendance-print-dialog .school-paper { max-width:100%; }
+@media (max-width:850px) {
+  dialog.attendance-print-dialog .school-paper { max-width:none; }
+}
 dialog.report .modal-title { position:sticky; top:0; z-index:1; background:#fff }
 .paper-student dl { text-align:right; display:grid; grid-template-columns:auto 1fr; gap:2px 8px; margin:0; font-size:13px }
 .paper-student dt { font-weight:700 }
@@ -1306,7 +1328,7 @@ const PUBLIC = ['home','login','register','parents','results','teachers','cantee
 const STUDENT_FIELDS = [
   ['year','السنة الدراسية',YEARS,true], ['reg','رقم القيد','text',true], ['national','الرقم الوطني','text'],
   ['name','اسم الطالب','text',true], ['mother','اسم الأم','text'], ['phone','رقم هاتف ولي الأمر','tel'],
-  ['nation','الجنسية',NATIONALITIES], ['birth','تاريخ الميلاد','date'], ['gender','الجنس',['ذكر','أنثى'],true],
+  ['nation','الجنسية',NATIONALITIES], ['birth','تاريخ الميلاد','date'], ['gender','الجنس',['ذكر','أنثى']],
   ['cls','مرحلة الطالب',CLASSES,true], ['section','الفصل',SECTIONS], ['stream','التخصص',['علمي','أدبي']]
 ];
 const STUDENT_EXPORT = [['reg','رقم القيد'],['national','الرقم الوطني'],['name','الاسم'],['mother','اسم الأم'],['nation','الجنسية'],['gender','الجنس'],['birth','تاريخ الميلاد'],['cls','الصف'],['section','الفصل'],['stream','التخصص'],['phone','رقم هاتف ولي الأمر']];
@@ -2006,7 +2028,7 @@ const transferAliases={
   nation:['الجنسية','جنسية الطالب','nationality'],
   gender:['الجنس','النوع','جنس الطالب','نوع الجنس','gender','sex'],
   birth:['تاريخ الميلاد','الميلاد','تاريخ ميلاد الطالب','تاريخ الولادة','date of birth','birth date','dob'],
-  cls:['الصف','الصف الدراسي','المرحلة الدراسية','مرحلة الطالب','صف الطالب','grade level','class level','class'],
+  cls:['الصف','الصف الدراسي','المستوى الدراسي','المرحلة الدراسية','مرحلة الطالب','صف الطالب','grade level','class level','class'],
   section:['الفصل','الشعبة','فصل الطالب','الفصل الدراسي للطالب','الفصل / الشعبة','الشعبة الدراسية','section','class section'],
   stream:['التخصص','القسم','الشعبة العلمية','المسار','track','stream'],
   phone:['رقم هاتف ولي الأمر','هاتف ولي الأمر','رقم هاتف الوالد','هاتف الوالد','هاتف الطالب','رقم الهاتف','phone','guardian phone']
@@ -2019,6 +2041,21 @@ const transferClassAliases=CLASSES.map((cls,i)=>{
 });
 const transferClassNames=new Map(transferClassAliases.flatMap(([cls,aliases])=>[cls,...aliases].map(alias=>[transferKey(alias),cls])));
 const transferClass=value=>transferClassNames.get(transferKey(value))||transferText(value);
+const transferYear=value=>{
+  const year=transferDigits(value).match(/^(20\d{2})\s*[-–/]\s*(20\d{2})$/);
+  return year?year.slice(1).sort().join('-'):'';
+};
+function transferSourceScope(source) {
+  const year=transferYear(source?.year), cls=transferClass(source?.cls), section=transferSection(source?.section), stream=transferStream(source?.stream);
+  return {year:YEARS.includes(year)?year:'',cls:CLASSES.includes(cls)?cls:'',section:SECTIONS.includes(section)?section:'',
+    stream:transferScopedStream(cls)&&['علمي','أدبي'].includes(stream)?stream:''};
+}
+function transferWorkbookYear(table) {
+  const column=table.headers.findIndex(header=>['السنهالدراسيه','العامالدراسي'].includes(transferKey(header)));
+  if(column<0)return '';
+  const years=new Set(table.rows.map(row=>transferYear(row[column])).filter(Boolean));
+  return years.size===1?[...years][0]:'';
+}
 const transferGender=value=>({
   ذكر:'ذكر',ذكور:'ذكر',طالب:'ذكر',ولد:'ذكر',male:'ذكر',m:'ذكر',
   انثي:'أنثى',انث:'أنثى',اناث:'أنثى',طالبه:'أنثى',بنت:'أنثى',female:'أنثى',f:'أنثى'
@@ -2149,8 +2186,9 @@ function transferStudentRecord(values,prior,scope) {
   record.section=transferSection(record.section);
   record.stream=transferScopedStream(record.cls)?transferStream(record.stream):'';
   record.birth=transferBirth(record.birth);
-  if(!record.reg||!record.name||!CLASSES.includes(record.cls)||!['ذكر','أنثى'].includes(record.gender))
-    throw new Error('أكمل رقم القيد والاسم والصف والجنس.');
+  if(!record.reg||!record.name)throw new Error('أكمل رقم القيد واسم الطالب.');
+  if(!CLASSES.includes(record.cls))throw new Error('اختر الصف الدراسي في بيانات المدرسة المستقبلة أو طابق عمود الصف.');
+  if(record.gender&&!['ذكر','أنثى'].includes(record.gender))throw new Error('قيمة الجنس غير معروفة.');
   if(record.phone&&!/^09\d{8}$/.test(record.phone))throw new Error('هاتف ولي الأمر يجب أن يبدأ بـ09 ويتكون من 10 أرقام.');
   if(record.section&&!SECTIONS.includes(record.section))throw new Error('الفصل غير معروف. اختر رقمًا من 1 إلى 10.');
   if(transferScopedStream(record.cls)&&!['علمي','أدبي'].includes(record.stream))throw new Error('حدد التخصص العلمي أو الأدبي.');
@@ -2186,7 +2224,7 @@ function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set()) {
   const byReg=new Map(roster.map(row=>[transferReg(row.reg),row]));
   const byNational=new Map(roster.map(row=>[transferNational(row.national),row]).filter(([national])=>national));
   const seen=new Set(), changes=[], entries=[];
-  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,errors:0};
+  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,missingGender:0,errors:0};
   for(const [index,row] of table.rows.entries()){
     if(!row.some(Boolean))continue;
     const values=Object.fromEntries(mapping.flatMap((key,i)=>key?[[key,row[i]]]:[]));
@@ -2216,6 +2254,7 @@ function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set()) {
             counters.skipped++;item.message='مطابق';
           }else {
             changes.push({id:student?.id||'',record,before});
+            if(!record.gender)counters.missingGender++;
             if(student){counters.updated++;item.message='تحديث بيانات';}
             else {counters.added++;item.message='إضافة طالب';}
           }
@@ -2247,7 +2286,9 @@ function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set()) {
     }catch(error){counters.errors++;item.error=true;item.message=error.message;}
     entries.push(item);
   }
-  return {changes,scope,summary:{total:entries.length,...counters,examples:entries.slice(0,18),issues:entries.filter(row=>row.error).slice(0,30)}};
+  const errors=new Map();
+  for(const entry of entries)if(entry.error)errors.set(entry.message,(errors.get(entry.message)||0)+1);
+  return {changes,scope,summary:{total:entries.length,...counters,errorCounts:[...errors],examples:entries.slice(0,18),issues:entries.filter(row=>row.error).slice(0,30)}};
 }
 function applyDataTransfer(school,plan,createId) {
   if(plan.summary.errors)throw new Error('صحّح صفوف الكشف المبينة في المعاينة قبل الحفظ.');
@@ -2267,6 +2308,150 @@ function exportDataTransfer(school,rawScope) {
   rows.sort((a,b)=>CLASSES.indexOf(a.cls)-CLASSES.indexOf(b.cls)||a.name.localeCompare(b.name,'ar'));
   return {headers:fields.map(field=>field.label),rows:rows.map(student=>fields.map(({key,item})=>
     item?school.grades[student.id]?.[scope.source+'|'+key]??'':student[key]??''))};
+}
+
+
+
+const staffText=value=>String(value??'').trim();
+const staffDigits=value=>staffText(value).replace(/[٠-٩۰-۹]/g,char=>String(char.charCodeAt(0)%16));
+const staffKey=value=>staffDigits(value).normalize('NFKC').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]/gu,'');
+const staffIdentifier=value=>{
+  const identifier=staffDigits(value);
+  return /^(?:0+|[-—–]+)$/.test(identifier)?'':identifier;
+};
+const staffImportAliases={name:['اسم الموظف','اسم المعلم','الاسم'],national:['رقم وطني','رقم الهوية'],
+  education:['رقم تعليمي'],financial:['رقم مالي'],shift:['الدوام'],year:['العام الدراسي']};
+
+function staffImportDate(value) {
+  const text=staffDigits(value);
+  if(!text||/^0+(?:[/-]0+)*$/.test(text))return '';
+  const parts=text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  const iso=parts?parts[3]+'-'+parts[2].padStart(2,'0')+'-'+parts[1].padStart(2,'0'):
+    /^\d{4,5}$/.test(text)?new Date(Date.UTC(1899,11,30)+Number(text)*86400000).toISOString().slice(0,10):text.replaceAll('/','-');
+  const date=new Date(iso+'T00:00:00Z');
+  return /^\d{4}-\d\d-\d\d$/.test(iso)&&Number.isFinite(+date)&&date.toISOString().slice(0,10)===iso?iso:text;
+}
+
+function prepareStaffImport(staff,rows,{year,replace=false}) {
+  if(!YEARS.includes(year))throw new Error('اختر سنة دراسية صالحة.');
+  const [header,...records]=rows;
+  const keys=Array.from(header||[],staffKey);
+  const mapping=STAFF_FIELDS.map(([key,label,type])=>{
+    const labels=[label,...(staffImportAliases[key]||[])].map(staffKey);
+    return {key,type,column:keys.findIndex(value=>labels.includes(value))};
+  }).filter(({column})=>column>=0);
+  if(!mapping.some(({key})=>key==='name'))throw new Error('يلزم وجود عمود الاسم الكامل في كشف الموظفين.');
+  const identifiers=['national','education','financial'];
+  const identityKeys=row=>identifiers.flatMap(key=>{
+    const value=staffIdentifier(row[key]);
+    return value?[row.year+'|'+key+'|'+value]:[];
+  });
+  const existing=new Map(), ambiguous=new Set(), seen=new Set();
+  for(const row of staff)for(const key of identityKeys(row)){
+    if(existing.has(key)&&existing.get(key)!==row)ambiguous.add(key);
+    existing.set(key,row);
+  }
+  const changes=[], summary={total:0,added:0,updated:0,skipped:0,errors:[]};
+  for(const [index,cells] of records.entries()){
+    if(!cells.some(value=>staffText(value)))continue;
+    summary.total++;
+    const input=Object.fromEntries(mapping.map(({key,type,column})=>{
+      const value=staffText(cells[column]);
+      return [key,type==='checkbox'?['1','نعم','true','yes'].includes(staffKey(value)):
+        type==='date'?staffImportDate(value):identifiers.includes(key)?staffIdentifier(value):value];
+    }));
+    try{
+      if(!input.name)throw new Error('أدخل اسم الموظف.');
+      if(input.name.length>180)throw new Error('اسم الموظف أطول من 180 حرفًا.');
+      const fileYear=transferSourceScope({year:input.year}).year;
+      if(input.year&&!fileYear)throw new Error('السنة الدراسية في الملف غير صالحة.');
+      input.year=fileYear||year;
+      if(input.national&&!/^\d{12}$/.test(input.national))throw new Error('تحقق من الرقم الوطني أو اتركه فارغًا.');
+      const identities=identityKeys(input);
+      if(identities.some(key=>ambiguous.has(key)))throw new Error('يوجد معرّف مكرر في سجلات الموظفين الحالية.');
+      const matches=new Set(identities.map(key=>existing.get(key)).filter(Boolean));
+      if(matches.size>1)throw new Error('تشير أرقام الموظف إلى سجلات مختلفة.');
+      const prior=[...matches][0];
+      if(prior&&identifiers.some(key=>staffIdentifier(prior[key])&&input[key]&&staffIdentifier(prior[key])!==input[key]))
+        throw new Error('تتعارض معرّفات الموظف مع السجل الموجود.');
+      const rowKeys=[...identities,...(prior?['id|'+prior.id]:[])];
+      if(rowKeys.some(key=>seen.has(key)))throw new Error('تكرر الموظف في الملف.');
+      rowKeys.forEach(key=>seen.add(key));
+      if(prior&&!replace){summary.skipped++;continue;}
+      const row={...prior,...Object.fromEntries(Object.entries(input).filter(([,value])=>value!==''))};
+      if(!['صباحية','مسائية'].includes(row.shift))throw new Error('حدد الفترة الصباحية أو المسائية.');
+      if(prior&&Object.keys(row).every(key=>row[key]===prior[key])){summary.skipped++;continue;}
+      changes.push({id:prior?.id||'',row});
+      summary[prior?'updated':'added']++;
+    }catch(error){summary.errors.push({line:index+2,reason:error.message});}
+  }
+  if(!summary.total)throw new Error('الملف لا يحتوي على سجلات موظفين.');
+  return {changes,summary};
+}
+
+function applyStaffImport(staff,plan,createId) {
+  if(plan.summary.errors.length)throw new Error('صحح الصفوف المبينة في معاينة استيراد الموظفين.');
+  const byId=new Map(staff.map(row=>[row.id,row]));
+  for(const {id,row} of plan.changes){
+    if(id)Object.assign(byId.get(id),row);
+    else staff.push({...row,id:createId(),created:Date.now()});
+  }
+}
+
+
+
+const attendanceCalendarCodes={حاضر:'ح',غائب:'غ',متأخر:'ت',مستأذن:'إ',عطلة:'ع'};
+const attendanceISO=date=>date.toISOString().slice(0,10);
+const attendanceDayFormat=new Intl.DateTimeFormat('ar-LY',{month:'long',year:'numeric',timeZone:'UTC'});
+
+function attendanceReportDates(date,range) {
+  const day=new Date(date+'T00:00:00Z');
+  if(!Number.isFinite(+day)||attendanceISO(day)!==date)throw new Error('اختر تاريخًا صالحًا للتقرير.');
+  const year=day.getUTCFullYear(), month=day.getUTCMonth();
+  const start=new Date(day);
+  if(range==='أسبوعي')start.setUTCDate(day.getUTCDate()-day.getUTCDay());
+  if(range==='شهري')start.setUTCDate(1);
+  const count=range==='شهري'?new Date(Date.UTC(year,month+1,0)).getUTCDate():range==='أسبوعي'?7:1;
+  const dates=Array.from({length:count},(_,index)=>{
+    const date=new Date(start);
+    date.setUTCDate(start.getUTCDate()+index);
+    return {date:attendanceISO(date),day:date.getUTCDate(),weekday:DAYS[date.getUTCDay()]};
+  });
+  return {dates,label:range==='شهري'?attendanceDayFormat.format(day):range==='أسبوعي'?dates[0].date+' إلى '+dates.at(-1).date:dates[0].weekday+' '+date};
+}
+
+function buildAttendanceReport(people,records,options) {
+  const {staff,year,date,range,periods,periodNames,absentOnly,status=''}=options;
+  if(!['يومي','أسبوعي','شهري'].includes(range))throw new Error('اختر مدة التقرير.');
+  const {dates,label}=attendanceReportDates(date,range);
+  const calendar=range!=='يومي';
+  const daily=dates.map(({date})=>records[year+'|'+date]||{});
+  const identities=staff?['ر.م','الرقم التعليمي','اسم الموظف','الوظيفة','الفترة']:['ر.م','رقم القيد','اسم الطالب','الصف','الفصل'];
+  const totals=absentOnly?['أيام الغياب']:['أيام الحضور','أيام الغياب'];
+  const headers=calendar?[...identities,...dates.map(day=>day.weekday+' '+day.date),...totals]:
+    [...identities,...periodNames,...(staff?['ملاحظة']:[])];
+  const displayHeaders=calendar?[...identities,...dates.map(day=>range==='شهري'?String(day.day):day.weekday+' '+day.date.slice(8)+'/'+day.date.slice(5,7)),...totals]:headers;
+  const entries=[];
+  for(const person of people){
+    const marks=daily.map(day=>periods.map(period=>day[person.id]?.[period]||''));
+    const absences=marks.filter(states=>states.includes('غائب')).length;
+    const present=marks.filter(states=>states.includes('حاضر')||states.includes('متأخر')).length;
+    if(absentOnly&&!absences||status&&!marks.some(states=>states.includes(status)))continue;
+    const identity=[entries.length+1,...(staff?[person.education||person.financial||'',person.name,person.job,person.shift]:[person.reg,person.name,person.cls,person.section])];
+    if(!calendar){
+      const row=[...identity,...marks[0],...(staff?[daily[0][person.id]?.note||'']:[])];
+      entries.push({row,display:row});
+      continue;
+    }
+    const totalCells=absentOnly?[absences]:[present,absences];
+    const values=marks.map(states=>states.map(state=>absentOnly&&state!=='غائب'?'':state));
+    const row=[...identity,...values.map(states=>states.some(Boolean)?states.map(state=>state||'—').join(' / '):''),...totalCells];
+    const display=[...identity,...values.map(states=>states.some(Boolean)?states.map(state=>attendanceCalendarCodes[state]||'·').join('\n'):''),...totalCells];
+    entries.push({row,display});
+  }
+  const legend=calendar?(absentOnly?'غ = غائب':Object.entries(attendanceCalendarCodes)
+    .filter(([state])=>staff||state!=='عطلة').map(([state,code])=>code+' = '+state).join('  ·  ')):'';
+  return {headers,displayHeaders,label,dates,calendar,legend,rows:entries.map(({row})=>row),displayRows:entries.map(({display})=>display)};
 }
 
 
@@ -2621,7 +2806,7 @@ function showDocument(title,headers,rows,markup,orientation,reflow=null,{margin,
   preview={title,headers,rows,markup,margin:margin??(framed?0:12),reflow,direction,paperSize:paperSize==='A3'?'A3':'A4'};
   const selector=fixed||framed&&!reflow?'':field(['orientation','الاتجاه',['عمودي','أفقي']],direction);
   const sheet=preview.paperSize==='A3'?'<span class="key" dir="ltr">A3</span>':'';
-  showDialog('معاينة الطباعة',`<div class="btns paper-toolbar">${btn('طباعة','print','','green')}${headers.length?btn('تنزيل Excel','export-report'):''}${selector}${sheet}</div><div class="paper-preview" data-orientation="${direction==='أفقي'?'landscape':'portrait'}">${markup}</div>`,'report');
+  showDialog('معاينة الطباعة',`<div class="btns paper-toolbar">${btn('طباعة','print','','green')}${headers.length?btn('تنزيل Excel','export-report'):''}${selector}${sheet}</div><div class="paper-preview" data-orientation="${direction==='أفقي'?'landscape':'portrait'}">${markup}</div>`,'report'+(markup.includes('class="school-paper paper-attendance-')?' attendance-print-dialog':''));
   $('#modal').scrollTop=0;
 }
 actions.print=()=>{
@@ -3339,7 +3524,8 @@ actions['quick-student']=()=>showDialog('إضافة سريعة',studentForm({},t
 actions['edit-student']=id=>showDialog('تعديل بيانات الطالب',studentForm(lookup('students',id)));
 function validateStudent(row,schoolData,id='') {
   for(const key of ['reg','national','phone'])row[key]=digits(row[key]);
-  if(!row.reg||!row.name||!YEARS.includes(row.year)||!CLASSES.includes(row.cls)||!['ذكر','أنثى'].includes(row.gender)) throw new Error('أكمل السنة ورقم القيد والاسم والصف والجنس.');
+  if(!row.reg||!row.name||!YEARS.includes(row.year)||!CLASSES.includes(row.cls)) throw new Error('أكمل السنة ورقم القيد والاسم والصف.');
+  if(row.gender&&!['ذكر','أنثى'].includes(row.gender))throw new Error('قيمة الجنس غير معروفة.');
   if(row.phone&&!/^09\d{8}$/.test(row.phone))throw new Error('رقم هاتف ولي الأمر يبدأ بـ09 ويتكون من 10 أرقام.');
   if(row.national&&!/^\d{12}$/.test(row.national))throw new Error('الرقم الوطني يتكون من 12 رقمًا.');
   if(['الثاني ثانوي','الثالث ثانوي'].includes(row.cls)) {
@@ -3506,8 +3692,8 @@ actions['student-print']=kind=>{
 };
 actions['student-stats']=()=>{
   const rows=studentRowsFor(route);
-  const result=CLASSES.map(cls=>{const group=rows.filter(s=>s.cls===cls);return [cls,group.filter(s=>s.gender==='ذكر').length,group.filter(s=>s.gender==='أنثى').length,group.length];}).filter(row=>row[3]>0);
-  schoolListReport('إحصائية الطلبة',filterData(route).year,['الصف','ذكور','إناث','المجموع'],[{rows:result}]);
+  const result=CLASSES.map(cls=>{const group=rows.filter(s=>s.cls===cls), boys=group.filter(s=>s.gender==='ذكر').length, girls=group.filter(s=>s.gender==='أنثى').length;return [cls,boys,girls,group.length-boys-girls,group.length];}).filter(row=>row[4]>0);
+  schoolListReport('إحصائية الطلبة',filterData(route).year,['الصف','ذكور','إناث','غير محدد','المجموع'],[{rows:result}]);
 };
 actions.template=type=>{
   const defs=type==='students'?INTAKE_TEMPLATE:STAFF_FIELDS.filter(def=>def[0]!=='year');
@@ -3524,7 +3710,8 @@ function excelDate(value) {
 }
 forms['import-rows']=async(data,form)=>{
   const type=form.dataset.type, student=type==='students';
-  const defs=student?STUDENT_EXPORT:STAFF_FIELDS.filter(def=>def[0]!=='year');
+  if(!student)return previewStaffWorkbook(data,form);
+  const defs=STUDENT_EXPORT;
   const rows=await readExcel(data.file);
   const headings=rows.shift()||[];
   const map=defs.map(([key,label,type])=>[key,headings.findIndex(h=>normalized(h)===normalized(label)||(key==='name'&&normalized(h)===normalized('اسم الطالب'))),type]);
@@ -3533,15 +3720,14 @@ forms['import-rows']=async(data,form)=>{
   if(!records.length)throw new Error('الملف لا يحتوي على سجلات.');
   await update(s=>{
     for(const record of records){
-      const item=record.row, idValue=student?digits(item.reg):digits(item.national);
-      const existing=s[type].find(x=>x.year===item.year&&idValue&&(student?x.reg:x.national)===idValue);
+      const item=record.row, idValue=digits(item.reg);
+      const existing=s.students.find(x=>x.year===item.year&&idValue&&x.reg===idValue);
       try {
         if(existing&&!data.replace)throw new Error('السجل موجود. فعّل تحديث البيانات للاستيراد إليه.');
         const next={...existing,...item,id:existing?.id||uid(),created:existing?.created||Date.now()};
-        if(student)validateStudent(next,s,existing?.id);
-        else validateStaff(next,s,existing?.id);
+        validateStudent(next,s,existing?.id);
         if(existing)Object.assign(existing,next);
-        else s[type].push(next);
+        else s.students.push(next);
       }catch(error){throw new Error('الصف '+record.index+' · '+error.message);}
     }
   });
@@ -3880,23 +4066,30 @@ forms['attendance-clear']=async()=>{
   });
   $('#modal').close();render();flash('فُرّغت سجلات اليوم للطلاب المحددين.');
 };
+const attendanceReportRanges=[['يومي','اليومي'],['أسبوعي','الأسبوعي'],['شهري','الشهري']];
 function attendanceReportControls(staff) {
-  return `<form data-form="attendance-report" class="stack">${staff?'':field(['period','الفترة',[['','جميع الفترات'],...ATTENDANCE_PERIODS.map((name,i)=>[String(i),name])]],'')}<div class="report-buttons">${[false,true].flatMap(absent=>['يومي','أسبوعي','شهري'].map(range=>`<button type="submit" name="scope" value="${range}|${Number(absent)}" class="btn ${absent?'danger':'outline-blue'}">${icon('print')} طباعة التقرير ال${range}${absent?' (الغائبين)':''}</button>`)).join('')}</div></form>`;
+  const f=filterData(route,{date:dayISO()});
+  return `<form data-form="attendance-report" class="stack"><div class="fields tight">${field(['date','تاريخ التقرير','date',true],f.date)}${staff?'':field(['period','الفترة',[['','جميع الفترات'],...ATTENDANCE_PERIODS.map((name,i)=>[String(i),name])]],'')}</div><div class="report-buttons">${[false,true].flatMap(absent=>attendanceReportRanges.map(([range,label])=>`<button type="submit" name="scope" value="${range}|${Number(absent)}" class="btn ${absent?'danger':'outline-blue'}">${icon('print')} ${absent?'كشف الغياب':'كشف الحضور والغياب'} ${label}</button>`)).join('')}</div></form>`;
 }
 actions['attendance-reports']=()=>showDialog('أدوات الطباعة والتقارير',attendanceReportControls(route==='staff-attendance'));
 forms['attendance-report']=(data,_form,event)=>{
   const [range,absent]=str(event.submitter?.value).split('|');
   const staff=route==='staff-attendance', f=filterData(route,{date:dayISO()}), records=school()[staff?'staffAttendance':'attendance'];
-  const names=attendanceRows(staff,f), days=Object.keys(records).filter(key=>key.startsWith(f.year+'|')).sort();
-  const dow=new Date(f.date+'T12:00:00').getDay(), first=shiftDate(f.date,-dow), last=shiftDate(first,6);
-  const accepted=days.filter(key=>{const date=key.split('|')[1];return range==='يومي'?date===f.date:range==='أسبوعي'?date>=first&&date<=last:date.slice(0,7)===f.date.slice(0,7);});
-  const periods=staff?[0]:data.period===''?[0,1,2]:[Number(data.period)];
-  const result=accepted.flatMap(key=>names.flatMap(s=>{
-    const record=records[key][s.id], states=periods.map(i=>record?.[i]||'—');
-    if(!record||states.every(status=>status==='—')||absent==='1'&&!states.includes('غائب'))return [];
-    return [[key.split('|')[1],s.name,staff?s.job:s.cls,...states]];
-  }));
-  schoolListReport('التقرير '+(absent==='1'?'الغياب ':'الحضور ')+range,f.year,['التاريخ','الاسم',staff?'الوظيفة':'الصف',...(staff?['الحالة']:periods.map(i=>ATTENDANCE_PERIODS[i]))],[{rows:result,meta:'<span>التاريخ: <bdi>'+esc(f.date)+'</bdi></span>'}]);
+  const periods=staff?[0]:['0','1','2'].includes(data.period)?[Number(data.period)]:[0,1,2];
+  const periodNames=staff?['الحالة']:periods.map(i=>ATTENDANCE_PERIODS[i]);
+  const people=attendanceRows(staff,{...f,status:''});
+  const report=buildAttendanceReport(people,records,{staff,year:f.year,date:data.date||f.date,range,periods,periodNames,absentOnly:absent==='1',status:f.status});
+  const title='كشف '+(absent==='1'?'الغياب':'الحضور والغياب')+' '+attendanceReportRanges.find(([key])=>key===range)[1]+' '+(staff?'للموظفين':'للطلبة');
+  const scope=[report.label,staff?f.shift:[f.cls,f.section,f.stream].filter(Boolean).join(' · '),
+    !staff?(periods.length===1?periodNames[0]:'جميع الفترات'):'',f.status].filter(Boolean);
+  const meta=scope.map(label=>'<span><bdi>'+esc(label)+'</bdi></span>').join('')+
+    (report.legend?'<span class="attendance-legend">'+esc(report.legend)+(periods.length>1?' · ترتيب الرموز حسب الفترات':'')+'</span>':'');
+  const settings={orientation:'أفقي',variant:report.calendar?'attendance-calendar':'attendance-daily',
+    rowsPerPage:report.calendar&&periods.length>1?17:24,fontSize:report.calendar?10:12,align:'وسط',shade:'light'};
+  const headings=report.displayHeaders.map((label,i)=>report.calendar&&i>=5+report.dates.length?
+    raw('<span class="attendance-total">'+esc(label)+'</span>'):label);
+  const {markup,orientation}=paperPages(title,f.year,headings,[{rows:report.displayRows,meta}],settings);
+  showDocument(title,report.headers,report.rows,markup,orientation,null,{fixed:true});
 };
 
 pages['student-promotion']=()=>{
@@ -4302,6 +4495,7 @@ function distributeHallRows(students,data) {
     }
   };
   if(data.mode==='gender'){
+    if(students.some(s=>!['ذكر','أنثى'].includes(s.gender)))throw new Error('استكمل حقل الجنس في سجلات الطلبة المحددين قبل توزيعهم حسب الجنس.');
     const male=hallRange(data.maleFrom,data.maleTo), female=hallRange(data.femaleFrom,data.femaleTo);
     if(male.some(room=>female.includes(room)))throw new Error('اختر نطاقين مختلفين لقاعات الذكور والإناث.');
     assign(students.filter(s=>s.gender==='ذكر'),male);
@@ -4543,7 +4737,9 @@ actions['sync-classes']=async()=>{
     for(const x of onlyYear(s.students,year).filter(x=>!x.archive&&x.section)){
       const key=x.cls+'|'+x.section;
       if(!groups.has(key))groups.set(key,{cls:x.cls,section:x.section,boys:0,girls:0});
-      groups.get(key)[x.gender==='ذكر'?'boys':'girls']++;
+      const group=groups.get(key);
+      if(x.gender==='ذكر')group.boys++;
+      if(x.gender==='أنثى')group.girls++;
     }
     for(const x of groups.values()){
       const row=s.classes.find(r=>r.year===year&&r.cls===x.cls&&r.section===x.section&&r.shift==='صباحية');
@@ -4730,7 +4926,10 @@ forms.days=async(data,form)=>{
 
 const staffColumns=[['name','الاسم'],['job','الوظيفة'],['shift','الفترة'],['national','الرقم الوطني'],['gender','الجنس'],['status','الحالة']];
 function staffForm(staff={},compact=false) {
-  const fields=STAFF_FIELDS;
+  const fields=STAFF_FIELDS.map(([key,label,type,required])=>[
+    key,label,Array.isArray(type)&&staff[key]&&!type.includes(staff[key])?[...type,staff[key]]:
+      type==='month'&&staff[key]&&!/^\d{4}-\d\d$/.test(staff[key])?'text':type,required
+  ]);
   return `<form data-form="staff" data-id="${esc(staff.id||'')}" class="stack"><div class="${compact?'fields':'fields tight'}">${formFields(fields,staff)}</div>${submit('حفظ')}</form>`;
 }
 function validateStaff(staff,s,id='') {
@@ -4740,6 +4939,32 @@ function validateStaff(staff,s,id='') {
   if(staff.national&&s.staff.some(x=>x.year===staff.year&&x.id!==id&&x.national===staff.national))throw new Error('الرقم الوطني مسجل بالفعل لهذه السنة.');
 }
 pages['add-staff']=()=>header('الموارد البشرية - إضافة معلم/موظف')+card(staffForm(),'بيانات الموظف')+`<div class="gap">${importCard('staff','الموظفين')}</div>`;
+let staffWorkbook=null;
+async function previewStaffWorkbook(data,form) {
+  const schoolId=activeSchoolId, page=route, rows=await readExcel(data.file);
+  if(!form.isConnected||schoolId!==activeSchoolId||page!==route)return;
+  const settings={year:data.year,replace:Boolean(data.replace)};
+  const plan=prepareStaffImport(school().staff,rows,settings);
+  const {total,added,updated,skipped,errors}=plan.summary;
+  staffWorkbook={schoolId,page,rows,settings,changes:plan.changes};
+  const details=errors.length?table(['صف الكشف','المشكلة'],errors.slice(0,30).map(error=>[error.line,error.reason])):'';
+  const save=!errors.length&&added+updated?`<form data-form="staff-import-apply">${submit('حفظ استيراد الموظفين')}</form>`:'';
+  showDialog('معاينة استيراد الموظفين',`<div class="stack"><p>${total} سجل · ${added} إضافة · ${updated} تحديث · ${skipped} موجود مسبقًا · ${errors.length} خطأ</p>${details}${save}</div>`);
+}
+forms['staff-import-apply']=async()=>{
+  const review=staffWorkbook;
+  if(!review||review.schoolId!==activeSchoolId||review.page!==route)throw new Error('أعد معاينة الملف داخل المدرسة المختارة.');
+  let summary;
+  await update(s=>{
+    const plan=prepareStaffImport(s.staff,review.rows,review.settings);
+    if(JSON.stringify(plan.changes)!==JSON.stringify(review.changes))throw new Error('تغيّرت سجلات الموظفين. أعد معاينة الملف.');
+    applyStaffImport(s.staff,plan,uid);
+    summary=plan.summary;
+  });
+  staffWorkbook=null;
+  $('#modal').close();render();flash('تم الاستيراد · '+summary.added+' إضافة · '+summary.updated+' تحديث.');
+};
+$('#modal').addEventListener('close',()=>{if(!$('#modal').open)staffWorkbook=null;});
 actions['staff-edit']=id=>showDialog('تعديل بيانات الموظف',staffForm(lookup('staff',id),true));
 forms.staff=async(data,form)=>{
   const id=form.dataset.id||uid(), row={...formText(data),id};
@@ -4754,16 +4979,42 @@ forms.staff=async(data,form)=>{
   $('#modal').close();render();flash('حُفظت بيانات الموظف.');
 };
 function staffRows(f) {
-  return onlyYear(school().staff,f.year).filter(s=>(!f.job||s.job===f.job)&&(!f.status||s.status===f.status)&&finds([s.name,s.national,s.job,s.phone].join(' '),f.q)).sort((a,b)=>localeCompare(a.name,b.name));
+  return onlyYear(school().staff,f.year).filter(s=>(!f.job||s.job===f.job)&&(!f.status||s.status===f.status)&&finds([s.name,s.education,s.national,s.financial,s.job,s.phone].join(' '),f.q)).sort((a,b)=>localeCompare(a.name,b.name));
 }
 pages['all-staff']=()=>{
   const f=filterData(route), page=paginate(route,staffRows(f),f), staff=onlyYear(school().staff,f.year);
   const jobs=[...new Set(staff.map(s=>s.job).filter(Boolean))], states=[...new Set(staff.map(s=>s.status).filter(Boolean))];
   return header('جميع الموظفين','قائمة بيانات العاملين',f.year)+card(filterForm(route,[FILTER_YEAR,['q','بحث','search'],['job','الوظيفة',jobs],['status','الحالة الوظيفية',states],FILTER_LIMIT],f))+
-    `<div class="btns gap">${link('إضافة معلم/موظف','add-staff','green')}${btn('تنزيل إكسل','staff-export')}${btn('أدوات الطباعة والتقارير','staff-report')}</div>${table(['#',...labelsFor(staffColumns),'إجراءات'],page.rows.map((s,i)=>[i+1,...valuesFor(s,staffColumns),raw(`<div class="row-tools">${btn('تعديل','staff-edit',s.id,'tiny soft')}${btn('بطاقة البيانات','staff-card',s.id,'tiny soft')}</div>`)]))}${page.tools}`;
+    `<div class="btns gap">${link('إضافة معلم/موظف','add-staff','green')}${btn('استيراد الموظفين','staff-import-dialog','','outline-blue')}${btn('تنزيل إكسل','staff-export')}${btn('أدوات الطباعة والتقارير','staff-report')}</div>${table(['#',...labelsFor(staffColumns),'إجراءات'],page.rows.map((s,i)=>[page.offset+i+1,...valuesFor(s,staffColumns),raw(`<div class="row-tools">${btn('تعديل','staff-edit',s.id,'tiny soft')}${btn('بطاقة البيانات','staff-card',s.id,'tiny soft')}</div>`)]))}${page.tools}`;
 };
+actions['staff-import-dialog']=()=>showDialog('استيراد الموظفين',importCard('staff','الموظفين',filterData(route).year));
 actions['staff-export']=()=>downloadExcel('سجل العاملين',labelsFor(STAFF_FIELDS),staffRows(filterData(route)).map(s=>valuesFor(s,STAFF_FIELDS)));
-actions['staff-report']=()=>{const f=filterData(route);showReport('كشف العاملين',f.year,labelsFor(staffColumns),staffRows(f).map(s=>valuesFor(s,staffColumns)));};
+const staffReports={
+  roster:['كشف العاملين',['education','name','job','shift','status']],
+  records:['كشف البيانات الوظيفية',['education','name','job','employment','appointed','decision','start','status']],
+  financial:['كشف الأرقام المالية',['education','name','financial','job','grade','status']],
+  qualifications:['كشف المؤهلات العلمية',['education','name','qualification','university','graduate','job']],
+  contact:['كشف بيانات الاتصال',['education','name','job','phone','address']],
+  stats:['إحصائية العاملين',[]]
+};
+actions['staff-report']=kind=>{
+  if(!Object.hasOwn(staffReports,kind))return showDialog('أدوات الطباعة والتقارير',`<div class="report-buttons">${Object.entries(staffReports).map(([key,[label]])=>btn(label,'staff-report',key,'outline-blue')).join('')}${link('تقارير حضور وغياب الموظفين','staff-attendance','soft')}</div>`);
+  const f=filterData(route), staff=staffRows(f), [title,keys]=staffReports[kind];
+  if(kind==='stats'){
+    const jobs=new Map();
+    for(const person of staff){
+      const job=person.job||'غير محدد';
+      const counts=jobs.get(job)||[0,0,0];
+      counts[person.gender==='ذكر'?0:person.gender==='أنثى'?1:2]++;
+      jobs.set(job,counts);
+    }
+    const rows=[...jobs].sort(([a],[b])=>localeCompare(a,b)).map(([job,counts])=>[job,...counts,sum(counts)]);
+    return schoolListReport(title,f.year,['الوظيفة','ذكور','إناث','غير محدد','المجموع'],[{rows}]);
+  }
+  const columns=keys.map(key=>STAFF_FIELDS.find(([name])=>name===key));
+  schoolListReport(title,f.year,['ر.م',...labelsFor(columns)],[{rows:staff.map((person,index)=>[index+1,...valuesFor(person,columns)])}],
+    {orientation:keys.length>5?'أفقي':'عمودي',fontSize:11,rowsPerPage:24});
+};
 actions['staff-card']=id=>{
   const s=lookup('staff',id);
   showReport('بطاقة بيانات موظف',s.year,['الحقل','البيان'],STAFF_FIELDS.map(([key,label])=>[label,typeof s[key]==='boolean'?(s[key]?'نعم':'لا'):s[key]||'—']));
@@ -6061,8 +6312,12 @@ function stageTransferTable(packet) {
   const data=transferTable(packet.table);
   const source=transferText(packet.source).slice(0,110);
   const requested=transferKinds.some(([key])=>key===packet.kind)?packet.kind:transferSettings.kind;
+  const context=transferSourceScope({year:transferWorkbookYear(data),...packet.context});
   const validClass=transferSettings.cls&&(requested!=='activities'||CLASSES.slice(2).includes(transferSettings.cls));
-  transferSettings={...transferSettings,kind:requested,cls:validClass?transferSettings.cls:requested==='students'?'':'الأول',replace:false};
+  const sourceClass=context.cls&&(requested!=='activities'||CLASSES.slice(2).includes(context.cls));
+  transferSettings={...transferSettings,kind:requested,year:context.year||transferSettings.year,
+    cls:sourceClass?context.cls:validClass?transferSettings.cls:requested==='students'?'':'الأول',
+    section:context.section||(sourceClass?'':transferSettings.section),stream:context.stream||(sourceClass?'':transferSettings.stream),replace:false};
   transferInbox={table:data,source,mapping:transferSuggestedMapping(data.headers,transferFields(currentTransferScope()))};
   transferReview=null;
 }
@@ -6079,7 +6334,7 @@ Object.defineProperty(window,'talabaDataTransfer',{
 function transferScopeForm() {
   const s=transferSettings, isStudents=s.kind==='students';
   const classes=s.kind==='activities'?CLASSES.slice(2):CLASSES;
-  const note=isStudents?'للطلاب الجدد، يُستخدم الصف والفصل المختاران إذا كانت خلايا الكشف فارغة.':'اختر الصف الذي رُصدت له الدرجات.';
+  const note=isStudents?'إذا خلا الكشف من عمود الصف، اختر الصف الدراسي هنا. يمكنك حفظ الطلاب الذين لم يُذكر جنسهم في الكشف.':'اختر الصف الذي رُصدت له الدرجات.';
   return `<form id="transfer-scope" class="stack"><div class="fields">${field(['kind','نوع الكشف',transferKinds],s.kind)}
     ${field(FILTER_YEAR,s.year)}${field(['cls','الصف',classes],s.cls,isStudents?{blank:'من الكشف / جميع الصفوف'}:{})}
     ${field(['section','الفصل',SECTIONS],s.section,{blank:isStudents?'من الكشف / جميع الفصول':'جميع الفصول'})}
@@ -6108,9 +6363,11 @@ function transferReviewCard() {
   const preview=table(['صف الكشف','معرّف الطالب','الاسم','النتيجة'],rows.map(row=>[
     row.line,row.id,row.name,row.message+(row.detail?' · '+row.detail:'')
   ]),{className:'transfer-table'});
-  const label=s.errors?'صحّح الصفوف المذكورة، ثم أعد المعاينة.':s.added+s.updated+s.grades?'راجع التغييرات ثم اضغط حفظ.':'لا توجد تغييرات للحفظ.';
-  const nationalNote=s.ignoredNational?`<p class="muted small gap">تجاهل الاستيراد ${s.ignoredNational} من قيم الرقم الوطني المحجوبة أو غير المكتملة. تُستخدم أرقام القيد لمطابقة هذه السجلات.</p>`:'';
-  return card(counts+notice(label,s.errors?'warn':'')+nationalNote+preview+
+  const label=s.errors?'تعذّر حفظ '+s.errors+' من السجلات للأسباب التالية.':s.added+s.updated+s.grades?'راجع التغييرات ثم اضغط حفظ.':'لا توجد تغييرات للحفظ.';
+  const errors=s.errorCounts?.length?`<ul>${s.errorCounts.map(([reason,n])=>`<li>${esc(reason)} <bdi>(${n})</bdi></li>`).join('')}</ul>`:'';
+  const nationalNote=s.ignoredNational?`<p class="muted small gap">${s.ignoredNational} رقم وطني محجوب أو غير مكتمل. يستخدم الاستيراد رقم القيد لهذه الصفوف.</p>`:'';
+  const genderNote=s.missingGender?`<p class="muted small gap">الجنس غير مذكور في ${s.missingGender} من السجلات التي ستُحفظ. يمكنك استكماله من قائمة الطلبة.</p>`:'';
+  return card(counts+notice(label,s.errors?'warn':'')+errors+nationalNote+genderNote+preview+
     (rows.length<(s.errors?s.errors:s.total)?'<p class="muted small gap">يعرض الجدول أول '+rows.length+' سجل.</p>':'')+
     (!s.errors&&s.added+s.updated+s.grades?`<div class="btns gap">${btn('حفظ الاستيراد','transfer-apply','','green')}</div>`:''),'معاينة قبل الحفظ');
 }
