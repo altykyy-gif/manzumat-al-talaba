@@ -367,6 +367,7 @@ forms.subuser=async(data,form)=>{
   $('#modal').close();render();flash('حُفظ المستخدم الفرعي.');
 };
 function canAccess(page) {
+  if(page==='data-transfer')return session?.role==='admin';
   if(PUBLIC.includes(page)||session?.role==='admin')return true;
   if(sharedMode)return Boolean(session&&(page==='dashboard'||page==='reference'||session.permissions.includes(page)));
   const user=school().users.find(u=>u.id===session?.userId&&u.active);

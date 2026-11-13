@@ -263,7 +263,7 @@ const ICONS={
   list:0xf0ca,print:0xf02f,transfer:0xf362,book:0xf02d,archive:0xf187,search:0xf002,certificate:0xf5a2,
   stream:0xf550,filter:0xf0b0,table:0xf0ce,key:0xf084,eye:0xf06e,eyeOff:0xf070,enter:0xf2f6,shield:0xf3ed,id:0xf2c2,lock:0xf023
 };
-const SCREEN_ICONS={'all-student':'people','add-student':'add','transferred-students':'archive','inter-school-transfers':'transfer','students-hall':'door',attendance:'check','vertical-grades':'stream'};
+const SCREEN_ICONS={'all-student':'people','add-student':'add','transferred-students':'archive','inter-school-transfers':'transfer','students-hall':'door',attendance:'check','vertical-grades':'stream','data-transfer':'transfer'};
 const MENU_ICONS=['dashboard','add','people','cap','check','up','door','calendar','coins','chart','group','children','teacher','canteen','chat','users','week','profile'];
 function icon(key) {return `<i class="site-icon" aria-hidden="true">&#${ICONS[key]||ICONS.list};</i>`;}
 function tabs(page,key,items,body) {
@@ -307,6 +307,7 @@ function render() {
   const hash=location.hash.slice(1)||'home';
   const next=HOME_ANCHORS.includes(hash)?'home':hash;
   const changed=route!==next;
+  if(changed&&route==='data-transfer')resetTransferPage();
   route=next;
   document.body.dataset.route=route;
   document.body.classList.toggle('admin-view',!PUBLIC.includes(route));
