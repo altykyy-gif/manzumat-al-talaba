@@ -133,6 +133,7 @@ function distributeHallRows(students,data) {
     }
   };
   if(data.mode==='gender'){
+    if(students.some(s=>!['ذكر','أنثى'].includes(s.gender)))throw new Error('استكمل حقل الجنس في سجلات الطلبة المحددين قبل توزيعهم حسب الجنس.');
     const male=hallRange(data.maleFrom,data.maleTo), female=hallRange(data.femaleFrom,data.femaleTo);
     if(male.some(room=>female.includes(room)))throw new Error('اختر نطاقين مختلفين لقاعات الذكور والإناث.');
     assign(students.filter(s=>s.gender==='ذكر'),male);
@@ -374,7 +375,9 @@ actions['sync-classes']=async()=>{
     for(const x of onlyYear(s.students,year).filter(x=>!x.archive&&x.section)){
       const key=x.cls+'|'+x.section;
       if(!groups.has(key))groups.set(key,{cls:x.cls,section:x.section,boys:0,girls:0});
-      groups.get(key)[x.gender==='ذكر'?'boys':'girls']++;
+      const group=groups.get(key);
+      if(x.gender==='ذكر')group.boys++;
+      if(x.gender==='أنثى')group.girls++;
     }
     for(const x of groups.values()){
       const row=s.classes.find(r=>r.year===year&&r.cls===x.cls&&r.section===x.section&&r.shift==='صباحية');

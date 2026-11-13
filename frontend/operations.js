@@ -1,6 +1,9 @@
 const staffColumns=[['name','الاسم'],['job','الوظيفة'],['shift','الفترة'],['national','الرقم الوطني'],['gender','الجنس'],['status','الحالة']];
 function staffForm(staff={},compact=false) {
-  const fields=STAFF_FIELDS;
+  const fields=STAFF_FIELDS.map(([key,label,type,required])=>[
+    key,label,Array.isArray(type)&&staff[key]&&!type.includes(staff[key])?[...type,staff[key]]:
+      type==='month'&&staff[key]&&!/^\d{4}-\d\d$/.test(staff[key])?'text':type,required
+  ]);
   return `<form data-form="staff" data-id="${esc(staff.id||'')}" class="stack"><div class="${compact?'fields':'fields tight'}">${formFields(fields,staff)}</div>${submit('حفظ')}</form>`;
 }
 function validateStaff(staff,s,id='') {
@@ -10,6 +13,32 @@ function validateStaff(staff,s,id='') {
   if(staff.national&&s.staff.some(x=>x.year===staff.year&&x.id!==id&&x.national===staff.national))throw new Error('الرقم الوطني مسجل بالفعل لهذه السنة.');
 }
 pages['add-staff']=()=>header('الموارد البشرية - إضافة معلم/موظف')+card(staffForm(),'بيانات الموظف')+`<div class="gap">${importCard('staff','الموظفين')}</div>`;
+let staffWorkbook=null;
+async function previewStaffWorkbook(data,form) {
+  const schoolId=activeSchoolId, page=route, rows=await readExcel(data.file);
+  if(!form.isConnected||schoolId!==activeSchoolId||page!==route)return;
+  const settings={year:data.year,replace:Boolean(data.replace)};
+  const plan=prepareStaffImport(school().staff,rows,settings);
+  const {total,added,updated,skipped,errors}=plan.summary;
+  staffWorkbook={schoolId,page,rows,settings,changes:plan.changes};
+  const details=errors.length?table(['صف الكشف','المشكلة'],errors.slice(0,30).map(error=>[error.line,error.reason])):'';
+  const save=!errors.length&&added+updated?`<form data-form="staff-import-apply">${submit('حفظ استيراد الموظفين')}</form>`:'';
+  showDialog('معاينة استيراد الموظفين',`<div class="stack"><p>${total} سجل · ${added} إضافة · ${updated} تحديث · ${skipped} موجود مسبقًا · ${errors.length} خطأ</p>${details}${save}</div>`);
+}
+forms['staff-import-apply']=async()=>{
+  const review=staffWorkbook;
+  if(!review||review.schoolId!==activeSchoolId||review.page!==route)throw new Error('أعد معاينة الملف داخل المدرسة المختارة.');
+  let summary;
+  await update(s=>{
+    const plan=prepareStaffImport(s.staff,review.rows,review.settings);
+    if(JSON.stringify(plan.changes)!==JSON.stringify(review.changes))throw new Error('تغيّرت سجلات الموظفين. أعد معاينة الملف.');
+    applyStaffImport(s.staff,plan,uid);
+    summary=plan.summary;
+  });
+  staffWorkbook=null;
+  $('#modal').close();render();flash('تم الاستيراد · '+summary.added+' إضافة · '+summary.updated+' تحديث.');
+};
+$('#modal').addEventListener('close',()=>{if(!$('#modal').open)staffWorkbook=null;});
 actions['staff-edit']=id=>showDialog('تعديل بيانات الموظف',staffForm(lookup('staff',id),true));
 forms.staff=async(data,form)=>{
   const id=form.dataset.id||uid(), row={...formText(data),id};
@@ -24,16 +53,42 @@ forms.staff=async(data,form)=>{
   $('#modal').close();render();flash('حُفظت بيانات الموظف.');
 };
 function staffRows(f) {
-  return onlyYear(school().staff,f.year).filter(s=>(!f.job||s.job===f.job)&&(!f.status||s.status===f.status)&&finds([s.name,s.national,s.job,s.phone].join(' '),f.q)).sort((a,b)=>localeCompare(a.name,b.name));
+  return onlyYear(school().staff,f.year).filter(s=>(!f.job||s.job===f.job)&&(!f.status||s.status===f.status)&&finds([s.name,s.education,s.national,s.financial,s.job,s.phone].join(' '),f.q)).sort((a,b)=>localeCompare(a.name,b.name));
 }
 pages['all-staff']=()=>{
   const f=filterData(route), page=paginate(route,staffRows(f),f), staff=onlyYear(school().staff,f.year);
   const jobs=[...new Set(staff.map(s=>s.job).filter(Boolean))], states=[...new Set(staff.map(s=>s.status).filter(Boolean))];
   return header('جميع الموظفين','قائمة بيانات العاملين',f.year)+card(filterForm(route,[FILTER_YEAR,['q','بحث','search'],['job','الوظيفة',jobs],['status','الحالة الوظيفية',states],FILTER_LIMIT],f))+
-    `<div class="btns gap">${link('إضافة معلم/موظف','add-staff','green')}${btn('تنزيل إكسل','staff-export')}${btn('أدوات الطباعة والتقارير','staff-report')}</div>${table(['#',...labelsFor(staffColumns),'إجراءات'],page.rows.map((s,i)=>[i+1,...valuesFor(s,staffColumns),raw(`<div class="row-tools">${btn('تعديل','staff-edit',s.id,'tiny soft')}${btn('بطاقة البيانات','staff-card',s.id,'tiny soft')}</div>`)]))}${page.tools}`;
+    `<div class="btns gap">${link('إضافة معلم/موظف','add-staff','green')}${btn('استيراد الموظفين','staff-import-dialog','','outline-blue')}${btn('تنزيل إكسل','staff-export')}${btn('أدوات الطباعة والتقارير','staff-report')}</div>${table(['#',...labelsFor(staffColumns),'إجراءات'],page.rows.map((s,i)=>[page.offset+i+1,...valuesFor(s,staffColumns),raw(`<div class="row-tools">${btn('تعديل','staff-edit',s.id,'tiny soft')}${btn('بطاقة البيانات','staff-card',s.id,'tiny soft')}</div>`)]))}${page.tools}`;
 };
+actions['staff-import-dialog']=()=>showDialog('استيراد الموظفين',importCard('staff','الموظفين',filterData(route).year));
 actions['staff-export']=()=>downloadExcel('سجل العاملين',labelsFor(STAFF_FIELDS),staffRows(filterData(route)).map(s=>valuesFor(s,STAFF_FIELDS)));
-actions['staff-report']=()=>{const f=filterData(route);showReport('كشف العاملين',f.year,labelsFor(staffColumns),staffRows(f).map(s=>valuesFor(s,staffColumns)));};
+const staffReports={
+  roster:['كشف العاملين',['education','name','job','shift','status']],
+  records:['كشف البيانات الوظيفية',['education','name','job','employment','appointed','decision','start','status']],
+  financial:['كشف الأرقام المالية',['education','name','financial','job','grade','status']],
+  qualifications:['كشف المؤهلات العلمية',['education','name','qualification','university','graduate','job']],
+  contact:['كشف بيانات الاتصال',['education','name','job','phone','address']],
+  stats:['إحصائية العاملين',[]]
+};
+actions['staff-report']=kind=>{
+  if(!Object.hasOwn(staffReports,kind))return showDialog('أدوات الطباعة والتقارير',`<div class="report-buttons">${Object.entries(staffReports).map(([key,[label]])=>btn(label,'staff-report',key,'outline-blue')).join('')}${link('تقارير حضور وغياب الموظفين','staff-attendance','soft')}</div>`);
+  const f=filterData(route), staff=staffRows(f), [title,keys]=staffReports[kind];
+  if(kind==='stats'){
+    const jobs=new Map();
+    for(const person of staff){
+      const job=person.job||'غير محدد';
+      const counts=jobs.get(job)||[0,0,0];
+      counts[person.gender==='ذكر'?0:person.gender==='أنثى'?1:2]++;
+      jobs.set(job,counts);
+    }
+    const rows=[...jobs].sort(([a],[b])=>localeCompare(a,b)).map(([job,counts])=>[job,...counts,sum(counts)]);
+    return schoolListReport(title,f.year,['الوظيفة','ذكور','إناث','غير محدد','المجموع'],[{rows}]);
+  }
+  const columns=keys.map(key=>STAFF_FIELDS.find(([name])=>name===key));
+  schoolListReport(title,f.year,['ر.م',...labelsFor(columns)],[{rows:staff.map((person,index)=>[index+1,...valuesFor(person,columns)])}],
+    {orientation:keys.length>5?'أفقي':'عمودي',fontSize:11,rowsPerPage:24});
+};
 actions['staff-card']=id=>{
   const s=lookup('staff',id);
   showReport('بطاقة بيانات موظف',s.year,['الحقل','البيان'],STAFF_FIELDS.map(([key,label])=>[label,typeof s[key]==='boolean'?(s[key]?'نعم':'لا'):s[key]||'—']));

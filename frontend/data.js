@@ -31,7 +31,7 @@ const PUBLIC = ['home','login','register','parents','results','teachers','cantee
 const STUDENT_FIELDS = [
   ['year','السنة الدراسية',YEARS,true], ['reg','رقم القيد','text',true], ['national','الرقم الوطني','text'],
   ['name','اسم الطالب','text',true], ['mother','اسم الأم','text'], ['phone','رقم هاتف ولي الأمر','tel'],
-  ['nation','الجنسية',NATIONALITIES], ['birth','تاريخ الميلاد','date'], ['gender','الجنس',['ذكر','أنثى'],true],
+  ['nation','الجنسية',NATIONALITIES], ['birth','تاريخ الميلاد','date'], ['gender','الجنس',['ذكر','أنثى']],
   ['cls','مرحلة الطالب',CLASSES,true], ['section','الفصل',SECTIONS], ['stream','التخصص',['علمي','أدبي']]
 ];
 const STUDENT_EXPORT = [['reg','رقم القيد'],['national','الرقم الوطني'],['name','الاسم'],['mother','اسم الأم'],['nation','الجنسية'],['gender','الجنس'],['birth','تاريخ الميلاد'],['cls','الصف'],['section','الفصل'],['stream','التخصص'],['phone','رقم هاتف ولي الأمر']];
@@ -108,4 +108,4 @@ function gradePlan(route, cls, stream) {
   return {components:names,items:Object.entries(totals).map(([key,total])=>({key,label:route==='student-grades-ninth'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],max:weights.map(weight=>Math.round(total*weight))}))};
 }
 const REMEDIAL_CLASSES=['الرابع','الخامس','السادس','السابع','الثامن','الأول ثانوي','الثاني ثانوي'];
-export {YEAR,YEARS,CLASSES,SECTIONS,DAYS,PERIODS,ATTENDANCE,SCHOOL_TYPES,REGIONS,REMEDIAL_CLASSES,STUDENT_EXPORT,routeForClass,gradePlan};
+export {YEAR,YEARS,CLASSES,SECTIONS,DAYS,PERIODS,ATTENDANCE,SCHOOL_TYPES,REGIONS,REMEDIAL_CLASSES,STUDENT_EXPORT,STAFF_FIELDS,routeForClass,gradePlan};

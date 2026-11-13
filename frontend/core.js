@@ -191,7 +191,7 @@ function showDocument(title,headers,rows,markup,orientation,reflow=null,{margin,
   preview={title,headers,rows,markup,margin:margin??(framed?0:12),reflow,direction,paperSize:paperSize==='A3'?'A3':'A4'};
   const selector=fixed||framed&&!reflow?'':field(['orientation','الاتجاه',['عمودي','أفقي']],direction);
   const sheet=preview.paperSize==='A3'?'<span class="key" dir="ltr">A3</span>':'';
-  showDialog('معاينة الطباعة',`<div class="btns paper-toolbar">${btn('طباعة','print','','green')}${headers.length?btn('تنزيل Excel','export-report'):''}${selector}${sheet}</div><div class="paper-preview" data-orientation="${direction==='أفقي'?'landscape':'portrait'}">${markup}</div>`,'report');
+  showDialog('معاينة الطباعة',`<div class="btns paper-toolbar">${btn('طباعة','print','','green')}${headers.length?btn('تنزيل Excel','export-report'):''}${selector}${sheet}</div><div class="paper-preview" data-orientation="${direction==='أفقي'?'landscape':'portrait'}">${markup}</div>`,'report'+(markup.includes('class="school-paper paper-attendance-')?' attendance-print-dialog':''));
   $('#modal').scrollTop=0;
 }
 actions.print=()=>{

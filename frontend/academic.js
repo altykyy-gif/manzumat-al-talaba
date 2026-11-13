@@ -321,23 +321,30 @@ forms['attendance-clear']=async()=>{
   });
   $('#modal').close();render();flash('فُرّغت سجلات اليوم للطلاب المحددين.');
 };
+const attendanceReportRanges=[['يومي','اليومي'],['أسبوعي','الأسبوعي'],['شهري','الشهري']];
 function attendanceReportControls(staff) {
-  return `<form data-form="attendance-report" class="stack">${staff?'':field(['period','الفترة',[['','جميع الفترات'],...ATTENDANCE_PERIODS.map((name,i)=>[String(i),name])]],'')}<div class="report-buttons">${[false,true].flatMap(absent=>['يومي','أسبوعي','شهري'].map(range=>`<button type="submit" name="scope" value="${range}|${Number(absent)}" class="btn ${absent?'danger':'outline-blue'}">${icon('print')} طباعة التقرير ال${range}${absent?' (الغائبين)':''}</button>`)).join('')}</div></form>`;
+  const f=filterData(route,{date:dayISO()});
+  return `<form data-form="attendance-report" class="stack"><div class="fields tight">${field(['date','تاريخ التقرير','date',true],f.date)}${staff?'':field(['period','الفترة',[['','جميع الفترات'],...ATTENDANCE_PERIODS.map((name,i)=>[String(i),name])]],'')}</div><div class="report-buttons">${[false,true].flatMap(absent=>attendanceReportRanges.map(([range,label])=>`<button type="submit" name="scope" value="${range}|${Number(absent)}" class="btn ${absent?'danger':'outline-blue'}">${icon('print')} ${absent?'كشف الغياب':'كشف الحضور والغياب'} ${label}</button>`)).join('')}</div></form>`;
 }
 actions['attendance-reports']=()=>showDialog('أدوات الطباعة والتقارير',attendanceReportControls(route==='staff-attendance'));
 forms['attendance-report']=(data,_form,event)=>{
   const [range,absent]=str(event.submitter?.value).split('|');
   const staff=route==='staff-attendance', f=filterData(route,{date:dayISO()}), records=school()[staff?'staffAttendance':'attendance'];
-  const names=attendanceRows(staff,f), days=Object.keys(records).filter(key=>key.startsWith(f.year+'|')).sort();
-  const dow=new Date(f.date+'T12:00:00').getDay(), first=shiftDate(f.date,-dow), last=shiftDate(first,6);
-  const accepted=days.filter(key=>{const date=key.split('|')[1];return range==='يومي'?date===f.date:range==='أسبوعي'?date>=first&&date<=last:date.slice(0,7)===f.date.slice(0,7);});
-  const periods=staff?[0]:data.period===''?[0,1,2]:[Number(data.period)];
-  const result=accepted.flatMap(key=>names.flatMap(s=>{
-    const record=records[key][s.id], states=periods.map(i=>record?.[i]||'—');
-    if(!record||states.every(status=>status==='—')||absent==='1'&&!states.includes('غائب'))return [];
-    return [[key.split('|')[1],s.name,staff?s.job:s.cls,...states]];
-  }));
-  schoolListReport('التقرير '+(absent==='1'?'الغياب ':'الحضور ')+range,f.year,['التاريخ','الاسم',staff?'الوظيفة':'الصف',...(staff?['الحالة']:periods.map(i=>ATTENDANCE_PERIODS[i]))],[{rows:result,meta:'<span>التاريخ: <bdi>'+esc(f.date)+'</bdi></span>'}]);
+  const periods=staff?[0]:['0','1','2'].includes(data.period)?[Number(data.period)]:[0,1,2];
+  const periodNames=staff?['الحالة']:periods.map(i=>ATTENDANCE_PERIODS[i]);
+  const people=attendanceRows(staff,{...f,status:''});
+  const report=buildAttendanceReport(people,records,{staff,year:f.year,date:data.date||f.date,range,periods,periodNames,absentOnly:absent==='1',status:f.status});
+  const title='كشف '+(absent==='1'?'الغياب':'الحضور والغياب')+' '+attendanceReportRanges.find(([key])=>key===range)[1]+' '+(staff?'للموظفين':'للطلبة');
+  const scope=[report.label,staff?f.shift:[f.cls,f.section,f.stream].filter(Boolean).join(' · '),
+    !staff?(periods.length===1?periodNames[0]:'جميع الفترات'):'',f.status].filter(Boolean);
+  const meta=scope.map(label=>'<span><bdi>'+esc(label)+'</bdi></span>').join('')+
+    (report.legend?'<span class="attendance-legend">'+esc(report.legend)+(periods.length>1?' · ترتيب الرموز حسب الفترات':'')+'</span>':'');
+  const settings={orientation:'أفقي',variant:report.calendar?'attendance-calendar':'attendance-daily',
+    rowsPerPage:report.calendar&&periods.length>1?17:24,fontSize:report.calendar?10:12,align:'وسط',shade:'light'};
+  const headings=report.displayHeaders.map((label,i)=>report.calendar&&i>=5+report.dates.length?
+    raw('<span class="attendance-total">'+esc(label)+'</span>'):label);
+  const {markup,orientation}=paperPages(title,f.year,headings,[{rows:report.displayRows,meta}],settings);
+  showDocument(title,report.headers,report.rows,markup,orientation,null,{fixed:true});
 };
 
 pages['student-promotion']=()=>{

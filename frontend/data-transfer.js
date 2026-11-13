@@ -21,8 +21,12 @@ function stageTransferTable(packet) {
   const data=transferTable(packet.table);
   const source=transferText(packet.source).slice(0,110);
   const requested=transferKinds.some(([key])=>key===packet.kind)?packet.kind:transferSettings.kind;
+  const context=transferSourceScope({year:transferWorkbookYear(data),...packet.context});
   const validClass=transferSettings.cls&&(requested!=='activities'||CLASSES.slice(2).includes(transferSettings.cls));
-  transferSettings={...transferSettings,kind:requested,cls:validClass?transferSettings.cls:requested==='students'?'':'الأول',replace:false};
+  const sourceClass=context.cls&&(requested!=='activities'||CLASSES.slice(2).includes(context.cls));
+  transferSettings={...transferSettings,kind:requested,year:context.year||transferSettings.year,
+    cls:sourceClass?context.cls:validClass?transferSettings.cls:requested==='students'?'':'الأول',
+    section:context.section||(sourceClass?'':transferSettings.section),stream:context.stream||(sourceClass?'':transferSettings.stream),replace:false};
   transferInbox={table:data,source,mapping:transferSuggestedMapping(data.headers,transferFields(currentTransferScope()))};
   transferReview=null;
 }
@@ -39,7 +43,7 @@ Object.defineProperty(window,'talabaDataTransfer',{
 function transferScopeForm() {
   const s=transferSettings, isStudents=s.kind==='students';
   const classes=s.kind==='activities'?CLASSES.slice(2):CLASSES;
-  const note=isStudents?'للطلاب الجدد، يُستخدم الصف والفصل المختاران إذا كانت خلايا الكشف فارغة.':'اختر الصف الذي رُصدت له الدرجات.';
+  const note=isStudents?'إذا خلا الكشف من عمود الصف، اختر الصف الدراسي هنا. يمكنك حفظ الطلاب الذين لم يُذكر جنسهم في الكشف.':'اختر الصف الذي رُصدت له الدرجات.';
   return `<form id="transfer-scope" class="stack"><div class="fields">${field(['kind','نوع الكشف',transferKinds],s.kind)}
     ${field(FILTER_YEAR,s.year)}${field(['cls','الصف',classes],s.cls,isStudents?{blank:'من الكشف / جميع الصفوف'}:{})}
     ${field(['section','الفصل',SECTIONS],s.section,{blank:isStudents?'من الكشف / جميع الفصول':'جميع الفصول'})}
@@ -68,9 +72,11 @@ function transferReviewCard() {
   const preview=table(['صف الكشف','معرّف الطالب','الاسم','النتيجة'],rows.map(row=>[
     row.line,row.id,row.name,row.message+(row.detail?' · '+row.detail:'')
   ]),{className:'transfer-table'});
-  const label=s.errors?'صحّح الصفوف المذكورة، ثم أعد المعاينة.':s.added+s.updated+s.grades?'راجع التغييرات ثم اضغط حفظ.':'لا توجد تغييرات للحفظ.';
-  const nationalNote=s.ignoredNational?`<p class="muted small gap">تجاهل الاستيراد ${s.ignoredNational} من قيم الرقم الوطني المحجوبة أو غير المكتملة. تُستخدم أرقام القيد لمطابقة هذه السجلات.</p>`:'';
-  return card(counts+notice(label,s.errors?'warn':'')+nationalNote+preview+
+  const label=s.errors?'تعذّر حفظ '+s.errors+' من السجلات للأسباب التالية.':s.added+s.updated+s.grades?'راجع التغييرات ثم اضغط حفظ.':'لا توجد تغييرات للحفظ.';
+  const errors=s.errorCounts?.length?`<ul>${s.errorCounts.map(([reason,n])=>`<li>${esc(reason)} <bdi>(${n})</bdi></li>`).join('')}</ul>`:'';
+  const nationalNote=s.ignoredNational?`<p class="muted small gap">${s.ignoredNational} رقم وطني محجوب أو غير مكتمل. يستخدم الاستيراد رقم القيد لهذه الصفوف.</p>`:'';
+  const genderNote=s.missingGender?`<p class="muted small gap">الجنس غير مذكور في ${s.missingGender} من السجلات التي ستُحفظ. يمكنك استكماله من قائمة الطلبة.</p>`:'';
+  return card(counts+notice(label,s.errors?'warn':'')+errors+nationalNote+genderNote+preview+
     (rows.length<(s.errors?s.errors:s.total)?'<p class="muted small gap">يعرض الجدول أول '+rows.length+' سجل.</p>':'')+
     (!s.errors&&s.added+s.updated+s.grades?`<div class="btns gap">${btn('حفظ الاستيراد','transfer-apply','','green')}</div>`:''),'معاينة قبل الحفظ');
 }

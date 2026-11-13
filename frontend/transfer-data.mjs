@@ -21,7 +21,7 @@ const transferAliases={
   nation:['الجنسية','جنسية الطالب','nationality'],
   gender:['الجنس','النوع','جنس الطالب','نوع الجنس','gender','sex'],
   birth:['تاريخ الميلاد','الميلاد','تاريخ ميلاد الطالب','تاريخ الولادة','date of birth','birth date','dob'],
-  cls:['الصف','الصف الدراسي','المرحلة الدراسية','مرحلة الطالب','صف الطالب','grade level','class level','class'],
+  cls:['الصف','الصف الدراسي','المستوى الدراسي','المرحلة الدراسية','مرحلة الطالب','صف الطالب','grade level','class level','class'],
   section:['الفصل','الشعبة','فصل الطالب','الفصل الدراسي للطالب','الفصل / الشعبة','الشعبة الدراسية','section','class section'],
   stream:['التخصص','القسم','الشعبة العلمية','المسار','track','stream'],
   phone:['رقم هاتف ولي الأمر','هاتف ولي الأمر','رقم هاتف الوالد','هاتف الوالد','هاتف الطالب','رقم الهاتف','phone','guardian phone']
@@ -34,6 +34,21 @@ const transferClassAliases=CLASSES.map((cls,i)=>{
 });
 const transferClassNames=new Map(transferClassAliases.flatMap(([cls,aliases])=>[cls,...aliases].map(alias=>[transferKey(alias),cls])));
 const transferClass=value=>transferClassNames.get(transferKey(value))||transferText(value);
+const transferYear=value=>{
+  const year=transferDigits(value).match(/^(20\d{2})\s*[-–/]\s*(20\d{2})$/);
+  return year?year.slice(1).sort().join('-'):'';
+};
+export function transferSourceScope(source) {
+  const year=transferYear(source?.year), cls=transferClass(source?.cls), section=transferSection(source?.section), stream=transferStream(source?.stream);
+  return {year:YEARS.includes(year)?year:'',cls:CLASSES.includes(cls)?cls:'',section:SECTIONS.includes(section)?section:'',
+    stream:transferScopedStream(cls)&&['علمي','أدبي'].includes(stream)?stream:''};
+}
+function transferWorkbookYear(table) {
+  const column=table.headers.findIndex(header=>['السنهالدراسيه','العامالدراسي'].includes(transferKey(header)));
+  if(column<0)return '';
+  const years=new Set(table.rows.map(row=>transferYear(row[column])).filter(Boolean));
+  return years.size===1?[...years][0]:'';
+}
 const transferGender=value=>({
   ذكر:'ذكر',ذكور:'ذكر',طالب:'ذكر',ولد:'ذكر',male:'ذكر',m:'ذكر',
   انثي:'أنثى',انث:'أنثى',اناث:'أنثى',طالبه:'أنثى',بنت:'أنثى',female:'أنثى',f:'أنثى'
@@ -164,8 +179,9 @@ function transferStudentRecord(values,prior,scope) {
   record.section=transferSection(record.section);
   record.stream=transferScopedStream(record.cls)?transferStream(record.stream):'';
   record.birth=transferBirth(record.birth);
-  if(!record.reg||!record.name||!CLASSES.includes(record.cls)||!['ذكر','أنثى'].includes(record.gender))
-    throw new Error('أكمل رقم القيد والاسم والصف والجنس.');
+  if(!record.reg||!record.name)throw new Error('أكمل رقم القيد واسم الطالب.');
+  if(!CLASSES.includes(record.cls))throw new Error('اختر الصف الدراسي في بيانات المدرسة المستقبلة أو طابق عمود الصف.');
+  if(record.gender&&!['ذكر','أنثى'].includes(record.gender))throw new Error('قيمة الجنس غير معروفة.');
   if(record.phone&&!/^09\d{8}$/.test(record.phone))throw new Error('هاتف ولي الأمر يجب أن يبدأ بـ09 ويتكون من 10 أرقام.');
   if(record.section&&!SECTIONS.includes(record.section))throw new Error('الفصل غير معروف. اختر رقمًا من 1 إلى 10.');
   if(transferScopedStream(record.cls)&&!['علمي','أدبي'].includes(record.stream))throw new Error('حدد التخصص العلمي أو الأدبي.');
@@ -201,7 +217,7 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
   const byReg=new Map(roster.map(row=>[transferReg(row.reg),row]));
   const byNational=new Map(roster.map(row=>[transferNational(row.national),row]).filter(([national])=>national));
   const seen=new Set(), changes=[], entries=[];
-  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,errors:0};
+  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,missingGender:0,errors:0};
   for(const [index,row] of table.rows.entries()){
     if(!row.some(Boolean))continue;
     const values=Object.fromEntries(mapping.flatMap((key,i)=>key?[[key,row[i]]]:[]));
@@ -231,6 +247,7 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
             counters.skipped++;item.message='مطابق';
           }else {
             changes.push({id:student?.id||'',record,before});
+            if(!record.gender)counters.missingGender++;
             if(student){counters.updated++;item.message='تحديث بيانات';}
             else {counters.added++;item.message='إضافة طالب';}
           }
@@ -262,7 +279,9 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
     }catch(error){counters.errors++;item.error=true;item.message=error.message;}
     entries.push(item);
   }
-  return {changes,scope,summary:{total:entries.length,...counters,examples:entries.slice(0,18),issues:entries.filter(row=>row.error).slice(0,30)}};
+  const errors=new Map();
+  for(const entry of entries)if(entry.error)errors.set(entry.message,(errors.get(entry.message)||0)+1);
+  return {changes,scope,summary:{total:entries.length,...counters,errorCounts:[...errors],examples:entries.slice(0,18),issues:entries.filter(row=>row.error).slice(0,30)}};
 }
 export function applyDataTransfer(school,plan,createId) {
   if(plan.summary.errors)throw new Error('صحّح صفوف الكشف المبينة في المعاينة قبل الحفظ.');
