@@ -1,0 +1,36 @@
+@font-face { font-family:Cairo; src:url(cairo-arabic.woff2) format("woff2"); font-weight:200 1000; font-display:swap; unicode-range:U+0600-06FF,U+0750-077F,U+08A0-08FF,U+200C-200E,U+FB50-FDFF,U+FE70-FEFF }
+:root { color-scheme:light; font:14px/1.55 Cairo,"Segoe UI",Tahoma,sans-serif; color:#172741; background:#f0f4f9 }
+*,*::before,*::after { box-sizing:border-box }
+[hidden] { display:none!important }
+body { width:380px; min-width:300px; margin:0 }
+.brand { display:flex; gap:11px; align-items:center; padding:17px 17px 15px; background:#182b48; color:white }
+.brand h1 { margin:0; font-size:19px; font-weight:800; line-height:1.34 }
+.brand p { margin:2px 0 0; font-size:12px; color:#d7e4f6 }
+main { display:grid; gap:10px; padding:13px }
+.card { background:#fff; border:1px solid #d7e1ed; border-radius:12px; padding:13px 14px }
+h2 { margin:0 0 4px; font-size:15px; font-weight:800 }
+.hint { color:#50637d; margin:0 0 9px; font-size:13px }
+button,input,select { font:inherit }
+button { cursor:pointer; border:1px solid transparent; border-radius:7px; padding:6px 10px; min-height:36px; font-weight:700 }
+button:disabled { opacity:.55; cursor:default }
+.primary { background:#1558c4; color:white }
+.primary:hover:not(:disabled) { background:#1049a7 }
+.secondary { background:#edf4fe; color:#1a4e94; border-color:#d4e3f9 }
+.secondary:hover { background:#deebfc }
+.subtle { background:white; color:#3c536f }
+.subtle:hover { background:#edf4fe }
+.small { min-height:30px; padding:3px 6px; font-size:12px }
+.full { width:100% }
+.stack { margin-top:10px; display:grid; gap:5px }
+.stack button { margin-top:4px }
+label { color:#354a68; font-size:12px; font-weight:700 }
+select,input { min-height:35px; width:100%; padding:4px 8px; border:1px solid #c7d4e5; background:#fff; color:#172741; border-radius:7px }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:7px }
+.packet-heading { display:flex; justify-content:space-between; align-items:start; gap:9px }
+.packet .hint { overflow-wrap:anywhere }
+.destination { color:#435a78; font-size:13px }
+.destination summary { cursor:pointer; padding:2px 3px }
+.destination form { display:grid; justify-items:start; gap:5px; padding:6px 2px }
+#status { border:1px solid #c4dbf5; background:#eaf3ff; color:#183f74; margin:0; padding:7px 9px; border-radius:7px; overflow-wrap:anywhere }
+#status[data-error=true] { background:#fff1f0; border-color:#f1c4c1; color:#982b29 }
+:focus-visible { outline:2px solid #205bbf; outline-offset:2px }

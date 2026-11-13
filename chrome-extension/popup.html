@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>أدوات منظومة الطلبة</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="brand">
+    <img src="icon48.png" width="41" height="41" alt="">
+    <div><h1>أدوات منظومة الطلبة</h1><p>نقل الكشوف وتصدير Excel</p></div>
+  </header>
+  <main>
+    <section id="source-panel" class="card">
+      <h2>جدول الصفحة الحالية</h2>
+      <p class="hint">افتح كشف الطلبة أو الدرجات في SRS، ثم اقرأ الجدول الظاهر.</p>
+      <button id="scan" class="primary full" type="button">قراءة الجداول</button>
+      <div id="table-options" class="stack" hidden>
+        <label for="table">الجدول</label>
+        <select id="table"></select>
+        <label for="kind">نوع الكشف</label>
+        <select id="kind">
+          <option value="students">بيانات الطلبة</option>
+          <option value="grades">الدرجات</option>
+          <option value="activities">تقديرات النشاط والغياب</option>
+        </select>
+        <button id="capture" class="primary full" type="button">التقاط الجدول</button>
+      </div>
+    </section>
+    <section id="destination-panel" class="card" hidden>
+      <h2>التبويب الحالي</h2>
+      <p class="hint">منظومة الطلبة. سجّل دخول الإدارة، ثم أرسل الكشف لمطابقة الأعمدة ومعاينة التغييرات.</p>
+      <button id="send" class="primary full" type="button" disabled>إرسال الكشف إلى المنظومة</button>
+      <button id="open-transfer" class="subtle full" type="button">فتح صفحة نقل البيانات</button>
+    </section>
+    <section id="packet" class="card packet" hidden>
+      <div class="packet-heading">
+        <div><h2>الكشف الملتقط</h2><p id="packet-info" class="hint"></p></div>
+        <button id="clear" class="subtle small" type="button">مسح</button>
+      </div>
+      <div class="row"><button id="excel" class="secondary" type="button">تنزيل Excel</button><button id="open" class="secondary" type="button">فتح المنظومة</button></div>
+    </section>
+    <p id="status" role="status" aria-live="polite" hidden></p>
+    <details class="destination">
+      <summary>رابط المنظومة</summary>
+      <form id="destination-form">
+        <label for="destination-url">رابط المنظومة المنشورة أو خادم المدرسة</label>
+        <input id="destination-url" type="url" dir="ltr" spellcheck="false" required>
+        <button class="secondary" type="submit">حفظ الرابط</button>
+      </form>
+    </details>
+  </main>
+  <script src="workbook.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
