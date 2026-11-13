@@ -31,8 +31,8 @@ async function turnPage(job,current,direction,expected) {
   if(!result?.navigating)throw new Error(result?.error||'تعذّر الضغط على رابط الصفحة التالية.');
   const limit=Date.now()+20_000;
   const originalRows=JSON.stringify(current.table.rows);
-  while(Date.now()<limit){
-    await new Promise(resolve=>setTimeout(resolve,300));
+  for(let delay=90;Date.now()<limit;delay=Math.min(delay+60,450)){
+    await new Promise(resolve=>setTimeout(resolve,delay));
     // The document can unload between reading the tab status and injecting the reader.
     const page=await scanPage(job,undefined,true);
     if(!page?.table||!page.page.number||page.page.number===current.page.number)continue;
@@ -73,7 +73,7 @@ async function runScan(job,sourceUrl,selection,kind,hostname) {
     job.selection.tableId=first.meta.tableId;
     const {table,pages}=await collectTransferPages(first,(...args)=>turnPage(job,...args),report);
     if(job.cancelled)throw new Error('أوقفت التقاط الصفحات.');
-    const pending={id:crypto.randomUUID(),source:hostname,kind,table,pages};
+    const pending={id:crypto.randomUUID(),source:hostname,kind,table,pages,context:first.context};
     await chrome.storage.session.set({pending,[scanKey]:{state:'complete',pages,rows:table.rows.length,total:first.meta.total}});
   }catch(error){
     await report({state:job.cancelled?'cancelled':'error',message:error.message});
