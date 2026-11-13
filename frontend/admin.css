@@ -1,0 +1,241 @@
+.site-icon {
+  display:inline-block;
+  font-family:'Font Awesome 6 Free';
+  font-style:normal;
+  font-weight:900;
+  line-height:1;
+  text-rendering:auto;
+}
+.admin-view { background:#f8f9fa; line-height:1.6 }
+.admin-view #app { display:flex; flex-direction:column; min-height:100svh }
+.admin-nav { position:sticky; top:0; padding:8px 16px; min-height:90px; box-shadow:0 2px 4px #00000013 }
+.nav-frame { min-height:74px; gap:10px; padding-inline-end:34px }
+.admin-links { display:block; flex:1; min-width:0 }
+.nav-row { display:flex; flex-wrap:wrap; align-items:center; gap:0 }
+.admin-links .nav-row>a,.admin-links summary {
+  color:#ddd; padding:6px 9px; font-size:14.5px; line-height:1.5; font-weight:500; white-space:nowrap;
+}
+.admin-links .site-icon { margin-inline-end:3px; font-size:.86em }
+.admin-links summary::after {
+  display:inline-block; content:''; margin-inline-start:5px; vertical-align:middle;
+  border:4px solid transparent; border-block-start-color:currentColor; transform:translateY(2px);
+}
+.admin-links .nav-row>a:hover,.admin-links summary:hover,.admin-links .nav-row>a[aria-current=page] { color:#fff }
+.admin-links .dropdown { border-radius:6px; padding:8px 0; border-color:#0000002b; box-shadow:0 8px 18px #0002 }
+.admin-links .dropdown a { font-size:14px; padding:4px 16px; border-radius:0 }
+.nav-session { flex-shrink:0; gap:5px }
+.nav-session .logout { display:flex; flex-direction:column; border-radius:8px; gap:4px; min-width:59px; min-height:51px; font-size:13px; line-height:1.3 }
+.nav-session .logout .site-icon { font-size:14px }
+.admin-footer { margin-top:auto; padding:16px; background:#212529; color:#f8f9fa; border:0 }
+.admin-footer a { color:#f8f9fa }
+.admin-content {
+  --main-width:1097px;
+  --main-top:24px;
+  --heading-size:40px;
+  --heading-weight:600;
+  --heading-color:#0d6efd;
+  width:min(calc(100% - 32px),var(--main-width));
+  margin:var(--main-top) auto 40px;
+}
+.admin-content .page-heading { padding:0; margin-block:0 24px; gap:9px; align-items:center }
+.admin-content .page-heading h1 { color:var(--heading-color); font-size:var(--heading-size); font-weight:var(--heading-weight); line-height:1.2; margin:0 }
+.heading-main .site-icon { margin-inline-end:10px; font-size:.83em }
+.heading-main small { font-size:.67em; font-weight:400; margin-inline-start:10px; white-space:normal }
+.admin-content .page-heading .year { font-weight:600; font-size:13.5px }
+.admin-content .card { border-radius:6px; border-color:#dee2e6; box-shadow:0 2px 4px #0000000d }
+.admin-content .card-header { padding:8px 16px; background:#f8f9fa; border-color:#dee2e6; border-radius:5px 5px 0 0 }
+.admin-content .card-header h2,.admin-content .card-header h3 { font-size:16px; font-weight:600; line-height:1.2 }
+.admin-content .card>.pad { padding:16px }
+.admin-content .grid2,.admin-content .grid3 { gap:24px }
+.admin-content .field { gap:5px; font-size:14.4px; line-height:1.5 }
+.admin-content .field>span { font-weight:600; color:#495057 }
+.admin-content .field input:not([type=checkbox]):not([type=radio]),
+.admin-content .field select,.admin-content .field textarea { border-color:#ced4da; padding:6px 12px }
+.admin-content .btn { min-height:36px; padding:6px 12px; font-size:14px; line-height:1.5 }
+.admin-content .btn.tiny { min-height:31px; padding:4px 8px; font-size:13px }
+.btn.info { background:#0dcaf0; color:#09272b }
+.btn.secondary { background:#6c757d; color:white }
+.btn.red { background:#dc3545; color:white }
+.btn.outline-green { color:#198754; background:white; border-color:#198754 }
+.btn.outline-dark { color:#212529; background:white; border-color:#212529 }
+.btn.outline-blue { color:#0d6efd; background:white; border-color:#0d6efd }
+.btn.outline-green:hover { background:#198754; color:white }
+.btn.outline-dark:hover { background:#212529; color:white }
+.btn.outline-blue:hover { background:#0d6efd; color:white }
+.btn .site-icon { font-size:1em }
+.admin-content .table-box { border-radius:4px; border-color:#dee2e6 }
+.admin-content th,.admin-content td { padding:8px; border-color:#dee2e6; font-size:14px }
+.admin-content th { font-weight:600 }
+.admin-content .table-dark thead th { background:#343a40; color:#fff; border-color:#454d55 }
+.panel-tabs {
+  display:flex; flex-wrap:wrap; align-items:flex-end; gap:0; padding:8px 16px 0;
+  border-bottom:1px solid #dee2e6; border-radius:5px 5px 0 0; background:#f8f9fa;
+}
+.panel-tab {
+  display:block; background:transparent; color:#0d6efd; border:1px solid transparent; margin-bottom:-1px;
+  border-radius:6px 6px 0 0; font-size:14px; line-height:1.5; padding:8px 13px; min-height:43px;
+}
+.panel-tab:hover { border-color:#e9ecef #e9ecef #dee2e6 }
+.panel-tab.active { color:#495057; background:white; border-color:#dee2e6 #dee2e6 #fff }
+.panel-body h4 { margin-bottom:9px }
+.admin-content .spaced-panel { margin-block-start:20px }
+.admin-content .grid2>.card,.admin-content .grid3>.card { min-width:0 }
+.form-actions { display:flex; align-items:flex-end }
+.report-buttons { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.report-set { display:grid; gap:12px }
+.report-set h4 { color:#495057; font-size:14px; font-weight:600; margin:0 0 5px }
+.roster-search { flex:1; min-width:190px }
+.roster-toolbar { margin-bottom:14px }
+.roster-toolbar h3 { margin:0; font-size:16px }
+.roster-toolbar .btns { flex:1; justify-content:flex-end }
+.roster-toolbar .field { flex:0 1 380px }
+.roster-table .row-tools { min-width:149px }
+.roster-table td { height:72px }
+.roster-table td:last-child { white-space:normal }
+.roster-table .row-tools .btn { width:32px; min-height:30px }
+.roster-options .check { min-height:31px }
+.roster-options .fields { align-items:end }
+.roster-options legend { font-weight:600; padding:0 7px }
+.roster-options fieldset { border:1px solid #dee2e6; border-radius:5px; min-width:0 }
+.roster-options .segmented { display:flex; gap:0; margin-block:5px 0 }
+.segmented label { display:flex; align-items:center; gap:5px; padding:5px 9px; border:1px solid #cbd0d6 }
+.segmented label+label { border-inline-start:0 }
+.roster-table .table-box { border-radius:3px }
+body:is([data-route=all-student],[data-route=transferred-students],[data-route=inter-school-transfers],
+[data-route=attendance],[data-route=books-receipt],[data-route=add_grades],[data-route=add_kindergarten_grades],
+[data-route=add_activity_grades],[data-route=student-grades-sse],[data-route=remedial_grades],[data-route=student-grades-ninth],
+[data-route=student-grades-first-secondary],[data-route=student-grades-second-secondary],[data-route=student-grades-third-secondary],
+[data-route=vertical-grades],[data-route=add-staff],[data-route=all-staff],[data-route=staff-attendance],
+[data-route=review-staff-requests],[data-route=staff-payments],[data-route=approve-photos],[data-route=exam-questions]) { background:#fff }
+[data-route=all-student] .heading-main small,[data-route=attendance] .heading-main small { color:#e5a900; font-size:.81em }
+[data-route=add-student] .admin-content { --main-top:44px; --heading-color:#212529; --heading-weight:500 }
+[data-route=add-student] .intake-heading { padding:16px 20px 4px; margin-bottom:20px; }
+[data-route=add-student] .intake-heading .page-heading { margin-bottom:12px }
+[data-route=add-student] .intake-heading .year { background:#0d6efd; color:#fff; border:0; padding:2px 9px }
+.intake-grid { padding-inline:20px; align-items:start }
+.intake-grid .card-header { min-height:71px; display:flex; align-items:center; justify-content:space-between; gap:10px }
+.intake-grid .card-header h3 { font-size:20px; color:#495057 }
+.intake-grid .stack .field { margin-bottom:12px }
+.intake-grid .stack>.field+.field { margin-block-start:0 }
+.intake-grid input[type=file] { padding:0 }
+.intake-grid input::file-selector-button { padding:6px 12px; font:inherit; border:0; border-inline-end:1px solid #ced4da; margin-inline-end:9px; background:#e9ecef }
+.intake-grid .example-sheet { margin-top:18px }
+.intake-grid .example-sheet h4 { font-size:15px; font-weight:600; margin:0 0 6px }
+[data-route=dashboard] .admin-content { --main-width:1108px }
+[data-route=dashboard] .dash-banner { min-height:175px; padding:30px 50px; margin:0 0 30px; border-radius:10px; border-color:#e9ecef; box-shadow:0 3px 10px #00000013 }
+.dash-heading { justify-self:start; margin-inline-start:36px }
+.dash-heading h1 { display:flex; gap:23px; align-items:center; justify-content:flex-end; font-size:40px; font-weight:600; line-height:1.2; margin:0 0 7px }
+.dash-caption { display:flex; gap:5px; align-items:center; flex-wrap:wrap }
+.dash-date { justify-self:end; margin:0; width:min(100%,312px); min-height:113px; padding:13px 18px; background:#f8f9fa; border-color:#e9ecef }
+.dash-date>div { display:flex; gap:15px; align-items:center }
+.dash-date .site-icon,.dash-caption .site-icon { margin-inline-end:4px }
+.dash-date .site-icon { color:#0d6efd }
+.dash-date>div:nth-child(2) .site-icon { color:#198754 }
+.dash-date>div:nth-child(3) .site-icon { color:#ffc107 }
+[data-route=dashboard] .dash-cards>.metric { min-height:310px; padding:22px 24px; border-color:#e9ecef; border-radius:10px }
+.dash-cards .metric>.site-icon { display:block; color:#0984fc; font-size:48px; margin-bottom:16px }
+.dash-cards .metric h3 { font-size:20px; font-weight:600; margin:0 0 4px }
+.dash-cards .metric strong { line-height:1.4 }
+.dash-cards .avatar { width:70px; height:70px; margin-top:9px }
+.dash-cards .demo-school-icon { display:inline-grid; place-items:center; width:70px; height:70px; margin-top:9px; color:#647488; border:3px double #647488; border-radius:50%; font-size:27px }
+.dash-chart { display:grid; grid-template-columns:25px minmax(0,1fr); grid-template-rows:169px 39px; direction:ltr; margin-top:26px }
+.chart-axis { display:flex; flex-direction:column; justify-content:space-between; position:relative; top:-6px; height:calc(100% + 12px); color:#5a5a5a; font:12px Arial,sans-serif }
+.dash-chart .chart { padding:0 4px; height:auto; align-items:end; background:repeating-linear-gradient(to top,transparent 0,transparent calc(var(--line-step) - 1px),#e2e4e6 calc(var(--line-step) - 1px),#e2e4e6 var(--line-step)); border-top:1px solid #ddd }
+.dash-chart .chart-labels { grid-column:2; gap:0; margin-top:6px }
+.dash-chart .chart-labels span { transform:rotate(-43deg); transform-origin:right top; text-align:right; white-space:nowrap; font-size:10px; width:0; flex:1 }
+.dash-chart .bar { background:#7db8f7; border-color:#4d9aed; min-width:2px; border-radius:7px 7px 0 0 }
+.dash-extra { margin-top:24px }
+[data-route=students-hall] { background:#f7f7f7 }
+body:is([data-route=exam-schedule],[data-route=exam-observers],[data-route=student-grades-barcode]) { background:#f5f7fa }
+body:is([data-route=parent-portal],[data-route=manage-teacher-accounts],[data-route=manage-canteen]) { background:#f6f8fb }
+body:is([data-route=students-hall],[data-route=exam-schedule],[data-route=exam-observers]) .admin-content { --main-width:1124px; --main-top:44px }
+body:is([data-route=students-hall],[data-route=exam-questions],[data-route=exam-schedule],[data-route=exam-observers],[data-route=students-cases],[data-route=student-grades-barcode]) .admin-content { --heading-size:32px }
+body:is([data-route=add-staff],[data-route=all-staff],[data-route=staff-attendance],[data-route=staff-payments],[data-route=parent-portal],[data-route=manage-teacher-accounts],[data-route=manage-canteen],[data-route=payments],[data-route=finance-report],[data-route=student-grades-third-secondary],[data-route=sub-users],[data-route=review-staff-requests],[data-route=record-exam-score],[data-route=books-receipt]) .admin-content { --heading-size:28px }
+body:is([data-route=student-grades-sse],[data-route=remedial_grades],[data-route=student-grades-ninth],[data-route=student-grades-first-secondary],[data-route=vertical-grades]) .admin-content { --heading-size:28px; --main-width:1057px; --main-top:20px }
+body:is([data-route=student_results],[data-route=approve-photos],[data-route=create-schedule-manual]) .admin-content { --heading-size:24px }
+body:is([data-route=parent-portal],[data-route=manage-teacher-accounts],[data-route=manage-canteen]) .admin-content { --heading-color:#212529; --main-width:1070px }
+[data-route=review-staff-requests] .admin-content { --heading-color:#343a40; --heading-weight:700 }
+body:is([data-route=manage-classes],[data-route=manage-subjects],[data-route=import-teachers-names],[data-route=assign-subjects],[data-route=create-schedule-new],[data-route=create-schedule-manual],[data-route=view-schedules],[data-route=manage-days],[data-route=add-staff],[data-route=all-staff],[data-route=staff-attendance],[data-route=staff-payments],[data-route=payments],[data-route=finance-report],[data-route=exam-questions],[data-route=exam-schedule],[data-route=exam-observers],[data-route=student-grades-barcode]) .admin-content { --heading-weight:500 }
+.grade-panes { display:grid; grid-template-columns:minmax(0,1fr); gap:18px }
+.grade-panes>form,.grade-panes>section { min-width:0 }
+.grade-panes .grid2 { align-items:stretch }
+.grade-panes .card .field { align-self:start }
+.grade-table thead th { text-align:center; font-size:13px; background:#e9ecef }
+.grade-table thead tr:nth-child(2) th { background:#f8f9fa }
+.grade-table .grade-max { font-size:12px; color:#495057; font-weight:600; padding:4px 8px; background:#f6f7f9 }
+.grade-table tbody .shade { background:#e9f3fe }
+.grade-table .grade-id { min-width:152px }
+.grade-table .table-input { min-width:68px }
+.grade-review h3 { font-size:16px; font-weight:600; margin:0 }
+.grade-review .result-summary { margin:0; font-size:14px }
+.attendance-toolbar .field { max-width:260px }
+.attendance-toolbar .field input { height:36px }
+.attendance-table .table-input { font-size:14px }
+.attendance-table .header-select { background:white; color:#212529; margin-top:4px }
+.hall-section-title { color:#0aa7bf; font-size:20px; font-weight:600; margin:0 0 8px }
+.hall-block { border:1px solid #dee2e6; border-radius:6px; padding:14px }
+.hall-form .grid2 { gap:12px }
+.hall-stat-card { align-self:start }
+.hall-stat-card h3 { font-size:16px; color:#6c757d; font-weight:600 }
+.hall-print-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,244px),1fr)); gap:8px }
+@media (min-width:751px) and (max-width:1160px) {
+  .nav-frame { padding-inline-end:0 }
+  .admin-links .nav-row>a,.admin-links summary { padding-inline:6px; font-size:13px }
+}
+@media (max-width:750px) {
+  .nav-frame { min-height:0; padding:0; align-items:center; justify-content:space-between }
+  .admin-nav { position:relative; min-height:0; padding:8px 12px }
+  .admin-links { display:none; order:2; margin-top:4px }
+  .admin-links.open,.nav-row { display:flex; flex-wrap:wrap }
+  .nav-row { width:100% }
+  .nav-session { margin-inline-start:auto }
+  .nav-session .logout { min-height:37px; flex-direction:row; padding:6px 10px }
+  .admin-content { margin-top:18px }
+  .admin-content .page-heading h1 { font-size:min(var(--heading-size),30px) }
+  .admin-links .dropdown { top:auto; inset-inline-start:12px }
+  [data-route=dashboard] .dash-banner { padding:18px; min-height:0; gap:15px }
+  .dash-heading { margin-inline-start:0 }
+  .dash-heading h1 { font-size:32px }
+  .intake-grid { padding-inline:0 }
+  [data-route=add-student] .intake-heading { padding-inline:0 }
+}
+@media (max-width:510px) {
+  .admin-content { width:calc(100% - 22px) }
+  .admin-content .card>.pad { padding:12px }
+  .panel-tabs { padding-inline:6px }
+  .panel-tab { min-height:38px; padding:6px 7px; font-size:13px }
+  .roster-toolbar .btns { width:100%; justify-content:flex-start }
+  .dash-heading h1 { justify-content:flex-start }
+  .dash-date { justify-self:stretch }
+  [data-route=dashboard] .dash-cards>.metric { min-height:200px }
+}
+.hall-form fieldset { margin:0; border:0; padding:0; min-width:0 }
+.hall-form fieldset[data-class-rooms] { border-top:1px solid #dee2e6; padding-top:8px }
+.hall-form legend { font-weight:600; color:#495057 }
+.attendance-toolbar { margin-bottom:14px }
+.attendance-toolbar .btns { align-items:flex-end }
+[data-route=user-profile] { background:#f4f6f9 }
+[data-route=user-profile] .admin-content { --main-top:74px }
+.profile-grid { padding-inline:12px }
+.profile-grid>.stack>*+* { margin-block-start:24px }
+.profile-card {
+  background:#fff; padding:25px; border-radius:15px; box-shadow:0 2px 8px #1e293b12;
+}
+.profile-card h2 { color:#6c757d; font-size:20px; font-weight:600; line-height:1.2; margin:0 0 24px }
+.profile-info { margin:0 0 15px; display:grid; grid-template-columns:minmax(95px,.8fr) minmax(0,1.2fr) }
+.profile-info dt,.profile-info dd { margin:0; padding:11px 0; border-bottom:1px solid #edf0f4; overflow-wrap:anywhere }
+.profile-info dt { font-weight:600; color:#475569; padding-inline-end:8px }
+.profile-image-card { text-align:center }
+.profile-logo { display:grid; place-items:center; width:min(200px,100%); aspect-ratio:1; object-fit:contain; border-radius:15px; margin:0 auto 18px; border:1px solid #e5e9ee; background:#f8fafc }
+.logo-placeholder { font-size:46px; color:#6e7f96 }
+.profile-logo.authority-logo { width:96px; border-radius:12px; margin-bottom:13px }
+.logo-form { text-align:right }
+.logo-formats { display:block; color:#64748b; line-height:1.55; font-size:13px }
+.logo-actions { margin-top:13px; justify-content:center }
+.profile-card .logo-form input[type=file] { min-height:38px; padding:3px; width:100% }
+.logo-form input::file-selector-button { border:0; padding:4px 12px; color:#334155; border-radius:4px; background:#e9ecef; margin-inline-end:8px }
+@media (max-width:750px) {
+  [data-route=user-profile] .admin-content { margin-top:24px }
+  .profile-grid { padding-inline:0 }
+  .profile-card { padding:18px }
+}
