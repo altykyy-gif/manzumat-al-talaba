@@ -1,7 +1,7 @@
 {
   "name": "manzumat-al-talaba",
   "private": true,
-  "version": "5.0.1",
+  "version": "5.1.0",
   "type": "module",
   "engines": {"node": ">=24"},
   "scripts": {"start": "node server.mjs", "demo": "node --no-warnings server.mjs --demo"}
