@@ -41,11 +41,11 @@ function sync() {
   if(scanning)$('page-scan-info').textContent=pageScan.message||
     pageScan.pages+' صفحة · '+pageScan.rows+(pageScan.total===null?'':' من '+pageScan.total)+' سجل. أبقِ تبويب الكشف مفتوحًا.';
   $('send').disabled=busy||scanning||!packet;
-  for(const id of ['scan','capture','capture-all','table','kind','open-transfer','excel','open','clear'])$(id).disabled=busy||scanning;
+  for(const id of ['scan','auto-capture','capture','capture-all','table','kind','open-transfer','excel','open','clear'])$(id).disabled=busy||scanning;
   $('open').hidden=connected;
   $('excel').parentElement.style.gridTemplateColumns=connected?'1fr':'';
-  if(packet)$('packet-info').textContent=kindNames[packet.kind]+' · '+packet.table.rows.length+' سجل'+
-    (packet.pages?' · '+packet.pages+' صفحة':'')+' · '+packet.source;
+  if(packet)$('packet-info').textContent=[kindNames[packet.kind],packet.table.rows.length+' سجل',packet.pages?packet.pages+' صفحة':'',
+    packet.context?.cls,packet.context?.year,packet.source].filter(Boolean).join(' · ');
 }
 function showScanState(status) {
   pageScan=status||null;
@@ -81,15 +81,15 @@ async function sendTable(tablePacket) {
   if(!isDestination(active.url))throw new Error('افتح رابط المنظومة المحدد ثم اضغط أيقونة الإضافة من تبويبها.');
   const result=await runOnTab(deliverTransferTable,tablePacket);
   if(!result.ready)throw new Error('المنظومة غير جاهزة لاستقبال الكشف.');
-  if(tablePacket){
-    const stored=(await chrome.storage.session.get('pending')).pending;
-    if(stored?.id===tablePacket.id)await chrome.storage.session.remove(['pending','pageScan']);
-    packet=null;
-  }
   message(tablePacket?'وصل الكشف إلى «'+result.school+'». راجع الأعمدة والصف ثم احفظه من داخل المنظومة.':'فُتحت صفحة نقل البيانات.');
 }
-function prepareExcelRows({headers,rows,kind}) {
-  if(kind==='students')return [headers,...rows];
+function prepareExcelRows({headers,rows,kind,context}) {
+  if(kind==='students'){
+    const fields=[['year','السنة الدراسية',/السنة الدراسية|العام الدراسي/],['cls','الصف',/^الصف$|المستوى الدراسي|المرحلة الدراسية|الصف الدراسي/],
+      ['section','الفصل',/^الفصل$|الشعبة/],['stream','التخصص',/التخصص|المسار/]];
+    const extras=fields.filter(([key,,aliases])=>context?.[key]&&!headers.some(header=>aliases.test(header)));
+    return [[...headers,...extras.map(([,label])=>label)],...rows.map(row=>[...row,...extras.map(([key])=>context[key])])];
+  }
   const numeric=headers.map(header=>/درجة|درجات|أعمال|امتحان|الفترة|المجموع|غياب|\bmark\b|\bscore\b/.test(header)&&!/رقم|معرف|\bid\b/i.test(header));
   return [headers,...rows.map(row=>row.map((value,i)=>{
     if(!numeric[i])return value;
@@ -98,7 +98,7 @@ function prepareExcelRows({headers,rows,kind}) {
   }))];
 }
 
-action('scan',async()=>{
+async function scanTables(){
   active=await currentTab();
   if(!/^(?:https?|file):/i.test(active.url))throw new Error('افتح صفحة الكشف في المتصفح.');
   $('table-options').hidden=true;
@@ -109,24 +109,25 @@ action('scan',async()=>{
     (item.paginated&&item.total!==null?item.rows+' من '+item.total:item.rows)+' سجل',String(item.index))));
   $('kind').value=tableList[0].kind;
   $('table-options').hidden=false;
-});
+}
+action('scan',scanTables);
 $('table').addEventListener('change',()=>{
   const table=selectedTable();
   if(table)$('kind').value=table.kind;
   sync();
 });
-action('capture',async()=>{
+async function captureCurrent(){
   active=await currentTab();
   if(active.url!==sourceUrl)throw new Error('تغيّرت الصفحة. أعد قراءة الجداول.');
   const before=selectedTable(), index=before?.index;
-  const {table,meta}=await runOnTab(readTransferTables,{index});
+  const {table,meta,context}=await runOnTab(readTransferTables,{index,tableId:before?.tableId});
   if(!before||before.label!==meta.label||before.width!==meta.width)throw new Error('تغيّر الجدول. أعد قراءته قبل الالتقاط.');
   const source=new URL(active.url).hostname||'ملف محلي';
-  packet={id:crypto.randomUUID(),source,kind:$('kind').value,table};
+  packet={id:crypto.randomUUID(),source,kind:$('kind').value,table,context};
   await chrome.storage.session.set({pending:packet,pageScan:null});
   message('الجدول جاهز للتنزيل أو الإرسال.');
-});
-action('capture-all',async()=>{
+}
+async function captureAll(){
   active=await currentTab();
   if(active.url!==sourceUrl)throw new Error('تغيّرت الصفحة. أعد قراءة الجداول.');
   const selection=selectedTable();
@@ -134,6 +135,14 @@ action('capture-all',async()=>{
   const result=await chrome.runtime.sendMessage({type:'talaba-start-pages',tabId:active.id,sourceUrl,selection,kind:$('kind').value});
   if(!result?.started)throw new Error(result?.error||'تعذّر بدء التقاط الصفحات.');
   showScanState((await chrome.storage.session.get('pageScan')).pageScan);
+}
+action('capture',captureCurrent);
+action('capture-all',captureAll);
+action('auto-capture',async()=>{
+  await scanTables();
+  const [first,second]=tableList;
+  if(second&&first.score===second.score){message('اختر الجدول المناسب من القائمة ثم اضغط التقاط.');return;}
+  await (first.paginated?captureAll():captureCurrent());
 });
 $('stop-scan').addEventListener('click',async()=>{
   try{
@@ -143,7 +152,7 @@ $('stop-scan').addEventListener('click',async()=>{
 });
 action('excel',async()=>{
   if(!packet)throw new Error('التقط جدولًا أولًا.');
-  const rows=prepareExcelRows({...packet.table,kind:packet.kind});
+  const rows=prepareExcelRows({...packet.table,kind:packet.kind,context:packet.context});
   const url=URL.createObjectURL(excelFile(rows)), anchor=document.createElement('a');
   anchor.href=url;
   anchor.download='كشف '+kindNames[packet.kind]+'.xlsx';

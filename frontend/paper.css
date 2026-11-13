@@ -57,6 +57,28 @@
 .grade-marks td:not(:first-child) { white-space:nowrap }
 .grade-paper-side .paper-student { border:2px solid #000; padding:8px; text-align:center }
 .paper-preview .school-paper { flex:none }
+.paper-attendance-calendar,.paper-attendance-daily { padding-inline:17px; }
+.paper-attendance-calendar .school-paper-head,.paper-attendance-daily .school-paper-head { min-height:94px; margin-bottom:6px }
+.paper-attendance-calendar .paper-meta,.paper-attendance-daily .paper-meta { margin-bottom:8px; font-weight:600 }
+.attendance-legend { flex-basis:100%; text-align:center; font-size:11px }
+.paper-attendance-calendar .school-paper-table { table-layout:fixed; }
+.paper-attendance-calendar .school-paper-table th,.paper-attendance-calendar .school-paper-table td { padding:2px 1px; line-height:1.12; }
+.paper-attendance-calendar .school-paper-table th:nth-child(1) { width:7mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(2) { width:18mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(3) { width:48mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(4) { width:22mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(5) { width:14mm }
+.paper-attendance-calendar .school-paper-table th:nth-child(n+6) { font-size:9px; }
+.paper-attendance-calendar .school-paper-table th:has(.attendance-total) { width:10mm; overflow-wrap:normal; }
+.paper-attendance-calendar .school-paper-table td:nth-child(n+6) { white-space:pre-line; }
+.paper-attendance-calendar .school-paper-table td:first-child { white-space:nowrap; }
+.paper-attendance-calendar .school-paper-table td:nth-child(3),.paper-attendance-daily .school-paper-table td:nth-child(3) { text-align:right; padding-inline:4px; }
+.paper-preview:has(.paper-attendance-calendar,.paper-attendance-daily) { padding:8px; }
+dialog.attendance-print-dialog { width:min(1210px,calc(100vw - 26px)); }
+dialog.attendance-print-dialog .school-paper { max-width:100%; }
+@media (max-width:850px) {
+  dialog.attendance-print-dialog .school-paper { max-width:none; }
+}
 dialog.report .modal-title { position:sticky; top:0; z-index:1; background:#fff }
 .paper-student dl { text-align:right; display:grid; grid-template-columns:auto 1fr; gap:2px 8px; margin:0; font-size:13px }
 .paper-student dt { font-weight:700 }

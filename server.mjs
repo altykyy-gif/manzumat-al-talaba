@@ -301,7 +301,7 @@ function validCollection(value,prior,key,s) {
       if(!safeRecordId(row.id)||ids.has(row.id)||!YEARS.includes(row.year)||typeof row.name!=='string'||!row.name.trim()||row.name.length>180)fail(400,'يوجد سجل غير صالح أو مكرر.');
       ids.add(row.id);
       if(key==='students'){
-        if(typeof row.reg!=='string'||!row.reg.trim()||row.reg.length>45||!CLASSES.includes(row.cls)||!['ذكر','أنثى'].includes(row.gender)||row.section&&!SECTIONS.includes(row.section)||reg.has(row.year+'|'+norm(row.reg)))fail(400,'يوجد رقم قيد مكرر أو بيانات صف غير صالحة.');
+        if(typeof row.reg!=='string'||!row.reg.trim()||row.reg.length>45||!CLASSES.includes(row.cls)||row.gender&&!['ذكر','أنثى'].includes(row.gender)||row.section&&!SECTIONS.includes(row.section)||reg.has(row.year+'|'+norm(row.reg)))fail(400,'يوجد رقم قيد مكرر أو بيانات صف غير صالحة.');
         reg.add(row.year+'|'+norm(row.reg));
       }
       if(row.national){

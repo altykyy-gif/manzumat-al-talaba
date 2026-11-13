@@ -29,6 +29,7 @@ export function readTransferTables(request={}) {
   const rowCells=(root,row)=>[...row.children].filter(el=>el.matches('th,td,[role="cell"],[role="gridcell"],[role="columnheader"],[role="rowheader"]')&&
     el.closest(rootSelector)===root&&visible(el));
   const digits=value=>text(value).replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)%16));
+  const key=value=>digits(value).replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]/gu,'').toLowerCase();
   const pageNumber=value=>/^\d{1,5}$/.test(digits(value))?Number(digits(value))||null:null;
   const pageControl='a[href],button,input[type="submit"],input[type="button"],[role="link"],[role="button"]';
   const currentPage='[aria-current="page"],[aria-current="true"],.current,.active,.selected';
@@ -81,14 +82,38 @@ export function readTransferTables(request={}) {
     return null;
   }
   function recordTotal(root) {
+    const findTotal=content=>[...digits(content).matchAll(/عدد\s+السجلات\s*[:：]?\s*(\d+(?:[,٬]\d{3})*)/g)]
+      .map(match=>Number(match[1].replace(/[,٬]/g,''))).filter(Number.isSafeInteger);
     let container=root.parentElement;
     for(let level=0;container&&level<5;level++,container=container.parentElement){
-      const content=digits(container.innerText).slice(0,16000);
-      const matches=[...content.matchAll(/عدد\s+السجلات\s*[:：]?\s*(\d+(?:[,٬]\d{3})*)/g)];
-      const totals=new Set(matches.map(match=>Number(match[1].replace(/[,٬]/g,''))).filter(Number.isSafeInteger));
+      const totals=new Set(findTotal((container.innerText||'').slice(0,16000)));
+      for(const label of container.querySelectorAll('label,span,td,th')){
+        if(root.contains(label)||label.children.length||!visible(label)||!/^عددالسجلات$/.test(key(label.innerText)))continue;
+        const siblings=[label.nextElementSibling,label.previousElementSibling].filter(Boolean);
+        const neighbor=siblings.map(el=>digits(el.innerText)).find(value=>/^\d+(?:[,٬]\d{3})*$/.test(value));
+        if(neighbor)totals.add(Number(neighbor.replace(/[,٬]/g,'')));
+      }
       if(totals.size)return totals.size===1?[...totals][0]:null;
     }
     return null;
+  }
+  function reportFilters(root) {
+    return [...(root.closest('form')||document).querySelectorAll('select')].filter(el=>!root.contains(el)&&visible(el));
+  }
+  function reportContext(filters) {
+    const context={};
+    for(const select of filters){
+      const value=digits((select.selectedOptions?.[0]||select.options?.[select.selectedIndex])?.textContent);
+      if(!value||!select.value)continue;
+      const labels=[select.getAttribute('aria-label'),select.title,...[...select.labels||[]].map(el=>el.innerText),
+        ...[select.closest('td')?.nextElementSibling,select.closest('td')?.previousElementSibling].map(el=>el?.innerText)].map(key);
+      const name=key(select.name||select.id);
+      if(/20\d\d\s*[-–/]\s*20\d\d/.test(value))context.year??=value.match(/20\d\d\s*[-–/]\s*20\d\d/)[0];
+      if(labels.some(label=>/^(?:المستوىالدراسي|المستويالدراسي|الصف(?:الدراسي)?|المرحلهالدراسيه)$/.test(label))||/ddl(?:level|class|grade)|classlevel|studylevel/.test(name)||/^الصف\s/.test(value))context.cls??=value;
+      if(labels.some(label=>/^(?:الشعبه|الفصل|رقمالفصل)$/.test(label))||/ddl(?:section|division)|classsection/.test(name))context.section??=value;
+      if(/^(?:علمي|أدبي|ادبي)$/.test(value))context.stream??=value;
+    }
+    return context;
   }
   const matrix=(rows)=>{
     const grid=[];
@@ -109,6 +134,7 @@ export function readTransferTables(request={}) {
   };
   const candidates=[];
   for(const [index,root] of [...document.querySelectorAll(rootSelector)].entries()){
+    if(request.tableId&&root.id!==request.tableId||!request.tableId&&Number.isInteger(request.index)&&request.index!==index)continue;
     if(!visible(root)||root.querySelector('input[type="password"]'))continue;
     const allRows=(root.tagName==='TABLE'?[...root.rows]:[...root.querySelectorAll('[role="row"]')])
       .filter(row=>row.closest(rootSelector)===root&&visible(row));
@@ -141,8 +167,10 @@ export function readTransferTables(request={}) {
     if(!rowCount||width>96)continue;
     const pager=pagination(root,allRows);
     const total=isSrs||pager?recordTotal(root):null;
+    const identityHeader=/رقم\s+(?:القيد|التسجيل)|الرقم\s+الوطني/i.test(labels);
+    const studentHeader=/اسم\s+(?:الطالب|التلميذ)|الاسم\s+الكامل/i.test(labels);
     const meta={index,tableId:root.id,width,rows:rowCount,kind,label:caption||hint||'جدول '+(index+1),
-      score:(headerClues.test(labels)?8:0)+(headerCount?2:0),total,paginated:Boolean(pager||total>rowCount)};
+      score:(identityHeader?8:0)+(studentHeader?6:0)+(headerClues.test(labels)?4:0)+(headerCount?2:0),total,paginated:Boolean(pager||total>rowCount)};
     const selected=request.tableId?root.id===request.tableId:request.index===index;
     if(selected){
       if(rowCount>5000)return {error:'الجدول يتجاوز 5000 سجل. اختر فصلًا أصغر من الصفحة.'};
@@ -166,9 +194,9 @@ export function readTransferTables(request={}) {
         }
         if(!rows.length)return {error:'الجدول لا يحتوي على بيانات ظاهرة.'};
         const page={number:pager?.number??null,first:Boolean(pager?.first),previous:Boolean(pager?.previous),next:Boolean(pager?.next)};
-        if(!request.paginate&&!request.turn)return {meta,table:{headers:headerNames,rows}};
-        const scope=JSON.stringify([...(root.closest('form')||document).querySelectorAll('select')]
-          .filter(el=>!root.contains(el)&&visible(el)).map(el=>[el.name||el.id,el.value]));
+        const filters=reportFilters(root), context=reportContext(filters);
+        if(!request.paginate&&!request.turn)return {meta,table:{headers:headerNames,rows},context};
+        const scope=JSON.stringify(filters.map(el=>[el.name||el.id,el.value]));
         if(request.turn){
           if(request.from!==page.number||request.scope!==scope||request.firstRow!==JSON.stringify(rows[0]))
             return {error:'تغيّر الكشف قبل الانتقال إلى الصفحة التالية.'};
@@ -178,7 +206,7 @@ export function readTransferTables(request={}) {
           setTimeout(()=>{if(control.isConnected)control.click();},40);
           return {navigating:true};
         }
-        return {meta,table:{headers:headerNames,rows},page,scope};
+        return {meta,table:{headers:headerNames,rows},page,scope,context};
       }catch(error){return {error:error.message};}
     }
     candidates.push(meta);

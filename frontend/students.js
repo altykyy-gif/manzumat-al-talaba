@@ -213,7 +213,8 @@ actions['quick-student']=()=>showDialog('إضافة سريعة',studentForm({},t
 actions['edit-student']=id=>showDialog('تعديل بيانات الطالب',studentForm(lookup('students',id)));
 function validateStudent(row,schoolData,id='') {
   for(const key of ['reg','national','phone'])row[key]=digits(row[key]);
-  if(!row.reg||!row.name||!YEARS.includes(row.year)||!CLASSES.includes(row.cls)||!['ذكر','أنثى'].includes(row.gender)) throw new Error('أكمل السنة ورقم القيد والاسم والصف والجنس.');
+  if(!row.reg||!row.name||!YEARS.includes(row.year)||!CLASSES.includes(row.cls)) throw new Error('أكمل السنة ورقم القيد والاسم والصف.');
+  if(row.gender&&!['ذكر','أنثى'].includes(row.gender))throw new Error('قيمة الجنس غير معروفة.');
   if(row.phone&&!/^09\d{8}$/.test(row.phone))throw new Error('رقم هاتف ولي الأمر يبدأ بـ09 ويتكون من 10 أرقام.');
   if(row.national&&!/^\d{12}$/.test(row.national))throw new Error('الرقم الوطني يتكون من 12 رقمًا.');
   if(['الثاني ثانوي','الثالث ثانوي'].includes(row.cls)) {
@@ -380,8 +381,8 @@ actions['student-print']=kind=>{
 };
 actions['student-stats']=()=>{
   const rows=studentRowsFor(route);
-  const result=CLASSES.map(cls=>{const group=rows.filter(s=>s.cls===cls);return [cls,group.filter(s=>s.gender==='ذكر').length,group.filter(s=>s.gender==='أنثى').length,group.length];}).filter(row=>row[3]>0);
-  schoolListReport('إحصائية الطلبة',filterData(route).year,['الصف','ذكور','إناث','المجموع'],[{rows:result}]);
+  const result=CLASSES.map(cls=>{const group=rows.filter(s=>s.cls===cls), boys=group.filter(s=>s.gender==='ذكر').length, girls=group.filter(s=>s.gender==='أنثى').length;return [cls,boys,girls,group.length-boys-girls,group.length];}).filter(row=>row[4]>0);
+  schoolListReport('إحصائية الطلبة',filterData(route).year,['الصف','ذكور','إناث','غير محدد','المجموع'],[{rows:result}]);
 };
 actions.template=type=>{
   const defs=type==='students'?INTAKE_TEMPLATE:STAFF_FIELDS.filter(def=>def[0]!=='year');
@@ -398,7 +399,8 @@ function excelDate(value) {
 }
 forms['import-rows']=async(data,form)=>{
   const type=form.dataset.type, student=type==='students';
-  const defs=student?STUDENT_EXPORT:STAFF_FIELDS.filter(def=>def[0]!=='year');
+  if(!student)return previewStaffWorkbook(data,form);
+  const defs=STUDENT_EXPORT;
   const rows=await readExcel(data.file);
   const headings=rows.shift()||[];
   const map=defs.map(([key,label,type])=>[key,headings.findIndex(h=>normalized(h)===normalized(label)||(key==='name'&&normalized(h)===normalized('اسم الطالب'))),type]);
@@ -407,15 +409,14 @@ forms['import-rows']=async(data,form)=>{
   if(!records.length)throw new Error('الملف لا يحتوي على سجلات.');
   await update(s=>{
     for(const record of records){
-      const item=record.row, idValue=student?digits(item.reg):digits(item.national);
-      const existing=s[type].find(x=>x.year===item.year&&idValue&&(student?x.reg:x.national)===idValue);
+      const item=record.row, idValue=digits(item.reg);
+      const existing=s.students.find(x=>x.year===item.year&&idValue&&x.reg===idValue);
       try {
         if(existing&&!data.replace)throw new Error('السجل موجود. فعّل تحديث البيانات للاستيراد إليه.');
         const next={...existing,...item,id:existing?.id||uid(),created:existing?.created||Date.now()};
-        if(student)validateStudent(next,s,existing?.id);
-        else validateStaff(next,s,existing?.id);
+        validateStudent(next,s,existing?.id);
         if(existing)Object.assign(existing,next);
-        else s[type].push(next);
+        else s.students.push(next);
       }catch(error){throw new Error('الصف '+record.index+' · '+error.message);}
     }
   });
