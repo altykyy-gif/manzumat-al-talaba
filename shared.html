@@ -1298,6 +1298,83 @@ dialog.report .modal-title { position:sticky; top:0; z-index:1; background:#fff 
 <div id="print-area"></div>
 <noscript><p class="container gap">افتح الملف في متصفح يدعم تشغيل جافاسكربت.</p></noscript>
 <script>
+const primarySubjects = {q:2,i:2,a:6,e:3,c:1,m:5};
+const upperPrimarySubjects = {q:2,i:2,a:4,w:2,e:3,c:1,m:5,s:3,g:3};
+const transportSubjects = {q:2,i:2,a:3,w:2,e:4,c:2,m:5,s:4,h:2,j:2,n:1};
+const scienceSecondarySubjects = {q:2,i:2,a:4,e:4,t:2,m:4,x:2,p:5,k:4,b:3,n:1};
+const artsSecondarySubjects = {q:2,i:2,a:7,e:5,t:2,x:2,h:3,j:3,n:1,f:2,z:2,u:2};
+
+const promoteByProgress = {components:[.30,.30,.40], autoPromote:true};
+const periodRules = {components:[.30,.30,.40], minTotal:.40};
+const semesterRules = {components:[.20,.30,.20,.30], finalIndexes:[1,3], minFinal:.40, minTotal:.50};
+const basicCertificateRules = {components:[.15,.15,.70], finalIndexes:[2], minFinal:.40, minTotal:.50};
+const secondaryCertificateRules = {...basicCertificateRules,minFinal:.50,maxSecondRoundSubjects:3};
+
+// Weekly lessons and components follow the 2026–2027 curriculum memos.
+const curriculum2026 = {
+  'الأول':{subjects:primarySubjects,rules:promoteByProgress},
+  'الثاني':{subjects:primarySubjects,rules:promoteByProgress},
+  'الثالث':{subjects:{...primarySubjects,s:2},rules:promoteByProgress},
+  'الرابع':{subjects:upperPrimarySubjects,rules:periodRules},
+  'الخامس':{subjects:upperPrimarySubjects,rules:periodRules},
+  'السادس':{subjects:{...upperPrimarySubjects,e:4,c:2},rules:semesterRules},
+  'السابع':{subjects:transportSubjects,rules:semesterRules},
+  'الثامن':{subjects:transportSubjects,rules:semesterRules},
+  'التاسع':{subjects:{...transportSubjects,s:5},rules:basicCertificateRules},
+  'الأول ثانوي':{subjects:{q:2,i:2,a:4,e:4,t:2,m:5,k:3,p:3,b:3,h:2,j:2,n:1,z:1},rules:semesterRules},
+  'الثاني ثانوي':{
+    'علمي':{subjects:scienceSecondarySubjects,rules:semesterRules},
+    'أدبي':{subjects:artsSecondarySubjects,rules:semesterRules}
+  },
+  'الثالث ثانوي':{
+    'علمي':{subjects:{...scienceSecondarySubjects,m:5,b:4},rules:secondaryCertificateRules},
+    'أدبي':{subjects:{...artsSecondarySubjects,f:3},rules:secondaryCertificateRules}
+  }
+};
+
+const gradingCurricula = {'2026-2027':curriculum2026};
+
+function curriculumFor(year,cls,stream) {
+  const entry=gradingCurricula[year]?.[cls];
+  return entry?.rules?entry:entry?.[stream==='أدبي'?'أدبي':'علمي']||null;
+}
+
+function curriculumSubject(key,weeklyPeriods,rules,cls) {
+  const totalMax=weeklyPeriods*40;
+  // The secondary memo gives civics 8 + 8 + 24 in both third-year tracks.
+  // Ninth-year civics uses the corrected 30/70 distribution, 6 + 6 + 28.
+  const max=cls==='الثالث ثانوي'&&key==='n'?[8,8,24]:rules.components.map(ratio=>Math.round(totalMax*ratio));
+  const finalIndexes=rules.finalIndexes||[max.length-1];
+  const finalMax=finalIndexes.reduce((total,index)=>total+max[index],0);
+  const decimal=(points,ratio)=>Math.round(points*ratio*10)/10;
+  const item={weeklyPeriods,totalMax,max,secondRoundMax:rules.autoPromote?null:finalMax,
+    minTotal:rules.minTotal?decimal(totalMax,rules.minTotal):null,minFinal:rules.minFinal?decimal(finalMax,rules.minFinal):null};
+  if(rules===semesterRules){
+    // For sixth-year science this gives 6 + 6 + 12 points of semester work.
+    item.workBreakdown={activities:max[0]/4,quizzes:max[0]/4,midterm:max[0]/2};
+  }
+  if(key==='p'&&['الثاني ثانوي','الثالث ثانوي'].includes(cls)){
+    item.parts=[
+      {label:cls==='الثاني ثانوي'?'الفيزياء الحرارية وخواص المادة':'الكهرباء والمغناطيسية والفيزياء الذرية',max:120},
+      {label:'الميكانيكا',max:80}
+    ];
+  }
+  return item;
+}
+
+// The archived 2025–2026 basic-education memo sets Arabic to 160 in grades 7–9.
+function historicalArabicMax(year,cls,source) {
+  if(year!=='2025-2026')return null;
+  if(['السابع','الثامن'].includes(cls)){
+    if(source==='student-grades-sse')return [32,48,32,48];
+    if(source==='remedial_grades')return [96];
+  }
+  if(cls==='التاسع'&&source==='student-grades-ninth')return [24,24];
+  return null;
+}
+
+
+
 const YEAR = '2026-2027';
 const YEARS = [YEAR, '2025-2026', '2024-2025', '2023-2024', '2022-2023', '2021-2022'];
 const CLASSES = ['الأول - رياض اطفال','الثاني - رياض اطفال','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن','التاسع','الأول ثانوي','الثاني ثانوي','الثالث ثانوي'];
@@ -1310,7 +1387,7 @@ const NATIONALITIES = 'ليبيا|سوريا|فلسطيـن|مصر|الأردن|
 const MENU = [
   ['لوحة التحكم','◴','dashboard'], ['إضافة طالب','⊕','add-student'],
   ['قائمة الطلاب','♟', [['all-student','جميع الطلاب'],['transferred-students','الطلبة المنتقلون الارشيف'],['inter-school-transfers','النقل عبر المدارس'],['books-receipt','إدارة كشف استلام الكتب'],['data-transfer','نقل البيانات من SRS']]],
-  ['الدرجات','◆', [['add_kindergarten_grades','تقييمات رياض الأطفال'],['add_grades','أعمال سنة – 1 إلى 5'],['add_activity_grades','رصد تقديرات مواد النشاط'],['student-grades-sse','أعمال سنة – النقل'],['remedial_grades','درجات الدور الثاني - النقل'],['record-exam-score','رصد برقم السري – النقل'],['student-grades-ninth','أعمال سنة - نظامي'],['student-grades-first-secondary','أعمال سنة – الأول ثانوي'],['student-grades-second-secondary','أعمال سنة – الثاني ثانوي'],['student-grades-third-secondary','أعمال سنة – الثالث ثانوي'],['student-grades-barcode','رصد الدرجات بالباركود'],['vertical-grades','الرصد العمودي للدرجات']]],
+  ['الدرجات','◆', [['add_kindergarten_grades','تقييمات رياض الأطفال'],['add_grades','أعمال سنة – 1 إلى 5'],['add_activity_grades','رصد تقديرات مواد النشاط'],['student-grades-sse','أعمال سنة – النقل'],['remedial_grades','درجات الدور الثاني'],['record-exam-score','رصد برقم السري – النقل'],['student-grades-ninth','أعمال سنة - نظامي'],['student-grades-first-secondary','أعمال سنة – الأول ثانوي'],['student-grades-second-secondary','أعمال سنة – الثاني ثانوي'],['student-grades-third-secondary','أعمال سنة – الثالث ثانوي'],['student-grades-barcode','رصد الدرجات بالباركود'],['vertical-grades','الرصد العمودي للدرجات']]],
   ['الحضور والغياب','✓', [['attendance','تسجيل الحضور اليومي']]],
   ['الترحــــيل','↑', [['student-promotion','ترحيل الطلبة'],['students-cases','حالات الطلبة المسجلون وغير المسجلين']]],
   ['إدارة الامتحانات','▤', [['students-hall','أرقام الجلوس'],['exam-questions','إنشاء أسئلة الامتحانات'],['exam-schedule','جدول الامتحانات'],['exam-observers','توزيع الملاحظين على القاعات']]],
@@ -1380,7 +1457,7 @@ function routeForClass(cls) {
   if (CLASSES.slice(7,10).includes(cls)) return 'student-grades-sse';
   return ['student-grades-ninth','student-grades-first-secondary','student-grades-second-secondary','student-grades-third-secondary'][CLASSES.indexOf(cls)-10];
 }
-function gradePlan(route, cls, stream) {
+function gradePlan(route, cls, stream, year=YEAR) {
   if (route === 'vertical-grades') route = routeForClass(cls);
   let names, weights, totals;
   if (route === 'add_kindergarten_grades') {
@@ -1389,6 +1466,22 @@ function gradePlan(route, cls, stream) {
   if (route === 'add_activity_grades') {
     const choices = ['مقبول','جيد','جيد جداً','ممتاز'];
     return {components:CLASSES.indexOf(cls)<7?['الفترة 1','الفترة 2','الفترة 3']:['الفصل الأول','الفصل الثاني'], items:['ar','mu','sp','ex','un'].map((key,i)=>({key,label:SUBJECTS[key],choices:i<3?choices:null,max:[180,180,180]}))};
+  }
+  const curriculum=curriculumFor(year,cls,stream);
+  if(curriculum&&(route===routeForClass(cls)||route==='remedial_grades')){
+    const {rules,subjects}=curriculum;
+    const certificate=rules.finalIndexes?.length===1;
+    const components=certificate?['أعمال - فترة 1','أعمال - فترة 2','امتحان نهاية العام']:
+      rules.finalIndexes?SEMESTERS:['أعمال فترة أولى - فترة 1','أعمال فترة ثانية - فترة 2','أعمال فترة ثالثة - فترة 3'];
+    const items=Object.entries(subjects).map(([key,weekly])=>({
+      key,label:key==='u'?'علم النفس':cls==='التاسع'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],
+      ...curriculumSubject(key,weekly,rules,cls)
+    }));
+    if(route==='remedial_grades')return {
+      components:['امتحان الدور الثاني'],items:items.filter(item=>item.secondRoundMax!==null).map(item=>({...item,max:[item.secondRoundMax]})),
+      rules,certificate
+    };
+    return {components,items,rules,certificate};
   }
   if (route === 'add_grades') {
     names = ['أعمال فترة أولى - فترة 1','أعمال فترة ثانية - فترة 2','أعمال فترة ثالثة - فترة 3'];
@@ -1405,9 +1498,17 @@ function gradePlan(route, cls, stream) {
     names = SEMESTERS; weights = [.2,.3,.2,.3];
     totals = route==='student-grades-first-secondary'?FIRST_SECONDARY:route==='student-grades-second-secondary'?(stream==='أدبي'?SECOND_ARTS:SECOND_SCIENCE):cls==='السادس'?SIXTH:UPPER_TRANSPORT;
   }
-  return {components:names,items:Object.entries(totals).map(([key,total])=>({key,label:route==='student-grades-ninth'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],max:weights.map(weight=>Math.round(total*weight))}))};
+  const arabic=historicalArabicMax(year,cls,route);
+  return {components:names,items:Object.entries(totals).map(([key,total])=>({
+    key,label:route==='student-grades-ninth'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],
+    max:key==='a'&&arabic?arabic:weights.map(weight=>Math.round(total*weight))
+  }))};
 }
 const REMEDIAL_CLASSES=['الرابع','الخامس','السادس','السابع','الثامن','الأول ثانوي','الثاني ثانوي'];
+const remedialClasses=year=>CLASSES.slice(2).filter(cls=>{
+  const curriculum=curriculumFor(year,cls);
+  return curriculum?!curriculum.rules.autoPromote:REMEDIAL_CLASSES.includes(cls);
+});
 
 
 
@@ -1446,7 +1547,7 @@ function makeDemo() {
   sample.assignments = sample.subjects.map((subject,i)=>({id:'assign-'+i,year:YEAR,cls:subject.cls,section:SECTIONS[0],shift:'صباحية',subject:subject.id,teacher:sample.staff[i%3].id,lessons:subject.lessons,date:dayISO()}));
   sample.schedules[yearKey(YEAR,'الثاني',SECTIONS[0])+'|صباحية']={year:YEAR,cls:'الثاني',section:SECTIONS[0],shift:'صباحية',type:'auto',slots:{'الأحد|0':{subject:'sub-الثاني-0',teacher:'staff-0'},'الاثنين|2':{subject:'sub-الثاني-0',teacher:'staff-0'}}};
   for(const student of sample.students) {
-    const gradeRoute=routeForClass(student.cls), plan=gradePlan(gradeRoute,student.cls,student.stream);
+    const gradeRoute=routeForClass(student.cls), plan=gradePlan(gradeRoute,student.cls,student.stream,student.year);
     sample.grades[student.id]={};
     for(const item of plan.items) plan.components.forEach((_,i)=>{
       sample.grades[student.id][gradeKey(gradeRoute,item.key,i)]=item.choices?item.choices[(i+1)%item.choices.length]:Math.round(item.max[i]*(.72+(Number(student.reg)%5)/20)*10)/10;
@@ -1454,8 +1555,6 @@ function makeDemo() {
   }
   sample.published[yearKey(YEAR,'الثاني')]=true;
   sample.published[yearKey(YEAR,'السابع')]=true;
-  sample.gradingRules[yearKey(YEAR,'الثاني')]={enabled:true,overall:50,subject:50,remedial:2};
-  sample.gradingRules[yearKey(YEAR,'السابع')]={enabled:true,overall:50,subject:50,remedial:2};
   sample.fees[yearKey(YEAR,'الثاني')]=500_000;
   sample.receipts.push({id:'demo-receipt',student:'sample-1',year:YEAR,amount:150_000,date:dayISO(),method:'نقدي',note:'دفعة تجريبية',number:1});
   sample.items.push({id:'demo-item',name:'وجبة تجريبية',price:2500,stock:20});
@@ -1558,9 +1657,9 @@ function cleanWorkflowText(value,maximum,required=false) {
   if(clean.length>maximum||required&&!clean)throw new Error(required?'أكمل الحقول المطلوبة وتحقق من طولها.':'النص أطول من الحد المسموح.');
   return clean;
 }
-function gradeRouteAccepts(source,cls) {
+function gradeRouteAccepts(source,cls,year=YEAR) {
   if(source==='add_activity_grades')return CLASSES.indexOf(cls)>=2;
-  if(source==='remedial_grades')return REMEDIAL_CLASSES.includes(cls);
+  if(source==='remedial_grades')return remedialClasses(year).includes(cls);
   return routeForClass(cls)===source;
 }
 function validatedGrade(value,item,index) {
@@ -1575,8 +1674,8 @@ function validatedGrade(value,item,index) {
   return Math.round(mark*10)/10;
 }
 function setGradeMark(s,student,source,subject,index,value) {
-  if(!student||student.archive||!gradeRouteAccepts(source,student.cls))throw new Error('السجل خارج كشف الدرجات المحدد.');
-  const plan=gradePlan(source,student.cls,student.stream);
+  if(!student||student.archive||!gradeRouteAccepts(source,student.cls,student.year))throw new Error('السجل خارج كشف الدرجات المحدد.');
+  const plan=gradePlan(source,student.cls,student.stream,student.year);
   const item=plan.items.find(row=>row.key===subject);
   if(!item||!Number.isInteger(index)||index<0||index>=plan.components.length)throw new Error('تعذر مطابقة المادة والفترة.');
   const mark=validatedGrade(value,item,index), key=gradeKey(source,subject,index);
@@ -1697,20 +1796,68 @@ function canteenSale(s,reg,itemId,quantity,year,date,id) {
   s.wallet.push({id,student:student.id,item:itemId,quantity,date,label:item.name+' × '+quantity,amount:-cost});
   return {total:cost,balance:balance-cost};
 }
+const roundGrade=value=>Math.round(value*10)/10;
+const sumGrades=values=>roundGrade(values.reduce((total,value)=>total+Number(value),0));
+const hasGradeValue=value=>value!==undefined&&value!==null&&value!=='';
+const numericMarkInRange=(value,max)=>hasGradeValue(value)&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=max;
+function gradeDeficit(item,mark,final) {
+  return Math.max(0,roundGrade((item.minTotal??0)-mark),roundGrade((item.minFinal??0)-final));
+}
+function summarizeGradeSubjects(subjects) {
+  const complete=subjects.length>0&&subjects.every(item=>item.complete);
+  const numeric=subjects.filter(item=>item.complete&&typeof item.mark==='number');
+  const total=sumGrades(numeric.map(item=>item.mark)), max=sumGrades(numeric.map(item=>item.max));
+  return {
+    subjects,rows:subjects.map(({label,mark,max})=>[label,mark,max]),available:subjects.some(item=>item.recorded),
+    complete,total,max,percent:complete&&max?Math.round(total/max*10000)/100:null
+  };
+}
 function gradeSummary(plan,source,marks,indices=null) {
-  let recorded=false, complete=true, total=0, max=0;
-  const rows=plan.items.map(item=>{
-    const indexes=indices??plan.components.map((_,i)=>i);
-    const values=indexes.map(i=>marks[source+'|'+item.key+'|'+i]);
-    if(values.some(v=>v!==undefined))recorded=true;
-    if(values.some(v=>v===undefined))complete=false;
-    if(item.choices)return [item.label,values.map(v=>v??'—').join(' / '),'—'];
-    const upper=indexes.reduce((sum,i)=>sum+item.max[i],0);
-    const grade=values.reduce((sum,v)=>sum+Number(v||0),0);
-    if(values.every(v=>v!==undefined)){total+=grade;max+=upper;}
-    return [item.label,values.every(v=>v!==undefined)?Math.round(grade*10)/10:'—',upper];
+  const indexes=indices??plan.components.map((_,i)=>i);
+  const subjects=plan.items.map(item=>{
+    const values=indexes.map(i=>marks[gradeKey(source,item.key,i)]);
+    const {key,label}=item, recorded=values.some(hasGradeValue);
+    if(item.choices){
+      const complete=values.every(value=>item.choices.includes(value));
+      return {key,label,recorded,complete,mark:values.map(value=>value??'—').join(' / '),max:'—'};
+    }
+    const complete=values.every((value,i)=>numericMarkInRange(value,item.max[indexes[i]]));
+    const max=sumGrades(indexes.map(i=>item.max[i])), mark=complete?sumGrades(values):'—';
+    const final=complete&&!indices?sumGrades((plan.rules?.finalIndexes||[]).map(i=>values[i])):0;
+    const need=complete&&!indices?gradeDeficit(item,mark,final):0;
+    return {key,label,recorded,complete,mark,max,need};
   });
-  return {rows,available:recorded,complete,total:Math.round(total*10)/10,max,percent:complete&&max?Math.round(total/max*10000)/100:null};
+  return summarizeGradeSubjects(subjects);
+}
+function gradeRetakeSummary(plan,source,marks) {
+  const first=gradeSummary(plan,source,marks);
+  const exams=plan.rules.finalIndexes||[plan.components.length-1];
+  const works=plan.components.map((_,i)=>i).filter(i=>!exams.includes(i));
+  const subjects=plan.items.map((item,i)=>{
+    const earlier=first.subjects[i];
+    if(earlier.complete&&!earlier.need)return earlier;
+    const exam=marks[gradeKey('remedial_grades',item.key,0)];
+    const work=works.map(index=>marks[gradeKey(source,item.key,index)]);
+    const complete=numericMarkInRange(exam,item.secondRoundMax)&&work.every((value,j)=>numericMarkInRange(value,item.max[works[j]]));
+    const mark=complete?sumGrades([...work,exam]):'—';
+    return {key:item.key,label:item.label,recorded:earlier.recorded||hasGradeValue(exam),complete,mark,
+      max:item.totalMax,need:complete?gradeDeficit(item,mark,exam):0};
+  });
+  return summarizeGradeSubjects(subjects);
+}
+function curriculumResult(result,rules,indices=null,retake=false) {
+  if(!result.complete||result.percent===null)return {status:'',weak:[]};
+  if(indices){
+    const weak=rules.minTotal===.40?result.subjects.flatMap(item=>{
+      const need=roundGrade(item.max*rules.minTotal-item.mark);
+      return need>0?[{...item,need}]:[];
+    }):[];
+    return {status:'',weak};
+  }
+  if(rules.autoPromote)return {status:'منقول',weak:[]};
+  const weak=result.subjects.filter(item=>item.need>0);
+  const status=!weak.length?'ناجح':retake||weak.length>(rules.maxSecondRoundSubjects??Infinity)?'راسب':'دور ثان';
+  return {status,weak};
 }
 function classifyResult(result,rule) {
   if(!rule?.enabled||!result.complete||result.percent===null)return {status:'',weak:[]};
@@ -1739,12 +1886,16 @@ const TEACHER_NOTE_TYPES=[['تشجيع وتميز','تشجيع وتميز وتف
 const TEACHER_ATTACHMENT_LIMIT=5_000_000;
 const teacherNormalize=value=>String(value??'').trim().replace(/[أإآ]/g,'ا').replace(/[\u064b-\u065fـ]/g,'').replace(/[^\p{L}\p{N}]/gu,'');
 function teacherSubject(assignment,stream) {
-  const source=routeForClass(assignment.cls), main=gradePlan(source,assignment.cls,stream);
+  const source=routeForClass(assignment.cls), main=gradePlan(source,assignment.cls,stream,assignment.year);
   const subject=teacherNormalize(assignment.label);
-  const alias=subject===teacherNormalize('اللغة العربية')&&assignment.cls==='التاسع'?'a':subject===teacherNormalize('الكتابة')?'w':null;
-  const item=main.items.find(x=>x.key===alias||teacherNormalize(x.label)===subject);
+  const aliases={
+    a:['العربية','اللغة العربية','النحو والقراءة والنصوص','اللغة العربية (النحو والقراءة والنصوص)'],
+    w:['الكتابة','التعبير والإملاء والخط'],g:['الاجتماعيات','المواد الاجتماعية'],
+    u:['علم النفس','التربية وعلم النفس'],p:['الفيزياء (الحرارية والميكانيكا)','الفيزياء (الكهرباء والميكانيكا)']
+  };
+  const item=main.items.find(x=>[x.label,...(aliases[x.key]||[])].some(name=>teacherNormalize(name)===subject));
   if(item)return {source,plan:main,item};
-  const activity=gradePlan('add_activity_grades',assignment.cls,stream);
+  const activity=gradePlan('add_activity_grades',assignment.cls,stream,assignment.year);
   const activityItem=activity.items.find(x=>x.choices&&teacherNormalize(x.label)===subject);
   return activityItem?{source:'add_activity_grades',plan:activity,item:activityItem}:null;
 }
@@ -1793,8 +1944,9 @@ function teacherRoster(s,group) {
 function gradeFieldsFor(s,group,stream) {
   const plan=teacherSubject(group,stream);
   if(!plan)return [];
-  const {source,item,plan:{components}}=plan;
-  const indexes=components.length===4?[0,2]:components.map((_,i)=>i);
+  const {source,item,plan:{components,rules}}=plan;
+  const exams=rules?.finalIndexes||(components.length===4?[1,3]:[]);
+  const indexes=components.map((_,i)=>i).filter(i=>!exams.includes(i));
   return indexes.map(index=>({index,label:components[index],key:gradeKey(source,item.key,index),max:item.choices?null:item.max[index],choices:item.choices||[],locked:teacherMarkLocked(s,group,item,components,index)}));
 }
 const teacherAttendanceKey=(group,date,lesson)=>[group.id,date,lesson].join('|');
@@ -2162,7 +2314,7 @@ function transferScope(raw,withMap=false) {
   if(!transferKinds.some(([key])=>key===kind)||!YEARS.includes(year))throw new Error('اختر نوع الكشف والسنة الدراسية.');
   if((kind!=='students'||cls)&&!CLASSES.includes(cls))throw new Error('اختر الصف الدراسي.');
   if(section&&!SECTIONS.includes(section))throw new Error('اختر الفصل من القائمة.');
-  if(kind==='activities'&&!gradeRouteAccepts('add_activity_grades',cls))throw new Error('اختر صفًا يدعم تقديرات النشاط.');
+  if(kind==='activities'&&!gradeRouteAccepts('add_activity_grades',cls,year))throw new Error('اختر صفًا يدعم تقديرات النشاط.');
   const stream=transferScopedStream(cls)?transferText(raw.stream):'';
   if(kind!=='students'&&transferScopedStream(cls)&&!['علمي','أدبي'].includes(stream))throw new Error('اختر التخصص.');
   if(stream&&!['علمي','أدبي'].includes(stream))throw new Error('التخصص غير صالح.');
@@ -2185,11 +2337,12 @@ function transferFields(scope) {
   if(scope.kind==='students')return STUDENT_EXPORT.map(([key,label])=>({key,label,aliases:transferAliases[key]}));
   const identity=['reg','national','name'].map(key=>({key,label:STUDENT_EXPORT.find(x=>x[0]===key)[1],aliases:transferAliases[key]}));
   if(!CLASSES.includes(scope.cls))return identity;
-  const plan=gradePlan(scope.kind==='activities'?'add_activity_grades':routeForClass(scope.cls),scope.cls,scope.stream);
+  const plan=gradePlan(scope.kind==='activities'?'add_activity_grades':routeForClass(scope.cls),scope.cls,scope.stream,scope.year);
   const alternateSubjects={
-    q:['القرآن'],i:['الإسلامية','التربية الدينية'],a:['العربية','اللغة العربية (النحو والقراءة والنصوص)','النحو والقراءة والنصوص'],e:['الإنجليزية','اللغة الإنكليزية'],
+    q:['القرآن'],i:['الإسلامية','التربية الدينية'],a:['العربية','اللغة العربية','اللغة العربية (النحو والقراءة والنصوص)','النحو والقراءة والنصوص'],e:['الإنجليزية','اللغة الإنكليزية'],
     w:['الكتابة','التعبير والإملاء والخط','اللغة العربية (الكتابة)'],
-    m:['رياضيات'],b:['الأحياء'],p:['فيزياء'],k:['كيمياء'],ar:['الفنية'],mu:['الموسيقية'],sp:['البدنية']
+    g:['الاجتماعيات','المواد الاجتماعية'],u:['علم النفس','التربية وعلم النفس'],
+    m:['رياضيات'],b:['الأحياء'],p:['فيزياء','الفيزياء (الحرارية والميكانيكا)','الفيزياء (الكهرباء والميكانيكا)'],k:['كيمياء'],ar:['الفنية'],mu:['الموسيقية'],sp:['البدنية']
   };
   const terms=plan.components.map((component,index)=>{
     const names=[component];
@@ -2198,6 +2351,8 @@ function transferFields(scope) {
       const labels=index%2?['امتحان','اختبار','امتحان نهاية','اختبار نهاية']:['أعمال','أعمال سنة','أعمال السنة'];
       for(const termName of ['الفصل '+term,'الفصل الدراسي '+term,'فصل '+term,'الفصل '+number,'الفصل الدراسي '+number])
         for(const label of labels)names.push(label+' '+termName,termName+' '+label);
+    }else if(plan.certificate&&index===2){
+      names.push('امتحان نهاية السنة','امتحان نهاية العام الدراسي','الامتحان النهائي','الامتحان الختامي','الفترة الثالثة','امتحان الفترة الثالثة');
     }else if(/فترة/.test(component)){
       const ordinal=['الأولى','الثانية','الثالثة'][index];
       names.push('الفترة '+ordinal,'فترة '+(index+1),'أعمال الفترة '+ordinal,'أعمال فترة '+(index+1));
@@ -2418,8 +2573,11 @@ function exportDataTransfer(school,rawScope) {
   const rows=school.students.filter(student=>!student.archive&&student.year===scope.year&&(!scope.cls||student.cls===scope.cls)&&
     (!scope.section||student.section===scope.section)&&(!scope.stream||student.stream===scope.stream));
   rows.sort((a,b)=>CLASSES.indexOf(a.cls)-CLASSES.indexOf(b.cls)||a.name.localeCompare(b.name,'ar'));
-  return {headers:fields.map(field=>field.label),rows:rows.map(student=>fields.map(({key,item})=>
-    item?school.grades[student.id]?.[scope.source+'|'+key]??'':student[key]??''))};
+  const scopeFields=[['year','السنة الدراسية'],...(scope.kind==='students'?[]:[['cls','الصف'],['section','الفصل'],['stream','التخصص']])];
+  return {headers:[...fields.map(field=>field.label),...scopeFields.map(([,label])=>label)],rows:rows.map(student=>[
+    ...fields.map(({key,item})=>item?school.grades[student.id]?.[scope.source+'|'+key]??'':student[key]??''),
+    ...scopeFields.map(([key])=>student[key]??'')
+  ])};
 }
 
 
@@ -3857,7 +4015,7 @@ pages.reference=()=>{
 
 const allowedClasses={
   add_kindergarten_grades:CLASSES.slice(0,2),add_grades:CLASSES.slice(2,7),add_activity_grades:CLASSES.slice(2), 
-  'student-grades-sse':CLASSES.slice(7,10),remedial_grades:REMEDIAL_CLASSES,'student-grades-ninth':['التاسع'],
+  'student-grades-sse':CLASSES.slice(7,10),remedial_grades:CLASSES.slice(5),'student-grades-ninth':['التاسع'],
   'student-grades-first-secondary':['الأول ثانوي'],'student-grades-second-secondary':['الثاني ثانوي'],
   'student-grades-third-secondary':['الثالث ثانوي']
 };
@@ -3865,13 +4023,13 @@ const gradeDraft = new Map();
 const gradeSelected=new Map();
 const draftKey=(id,key)=>[activeSchoolId,id,key].join('!');
 function gradeView(page=route) {
-  const classes=allowedClasses[page];
-  const f=filterData(page,{cls:page==='remedial_grades'?'السادس':classes[0],limit:'10',stream:'علمي',subject:'',component:''});
+  const f=filterData(page,{cls:page==='remedial_grades'?'السادس':allowedClasses[page][0],limit:'10',stream:'علمي',subject:'',component:''});
+  const classes=page==='remedial_grades'?remedialClasses(f.year):allowedClasses[page];
   if(!classes.includes(f.cls))f.cls=classes[0];
   if(!['الثاني ثانوي','الثالث ثانوي'].includes(f.cls))f.stream='';
   else if(!f.stream)f.stream='علمي';
   const source=page;
-  const plan=gradePlan(source,f.cls,f.stream);
+  const plan=gradePlan(source,f.cls,f.stream,f.year);
   const all=filterStudents(f);
   const items=f.subject?plan.items.filter(item=>item.key===f.subject):plan.items;
   const indexes=plan.components.map((_,i)=>i).filter(i=>f.component===''||Number(f.component)===i);
@@ -3943,9 +4101,9 @@ function gradePage() {
   const reports=gradeReportChoices(source,plan);
   const draftCount=[...gradeDraft.values()].filter(entry=>entry.school===activeSchoolId&&entry.key.startsWith(source+'|')).length;
   const reportControls=`<div class="report-buttons">${reports.map(([id,label])=>btn(label,'grades-report',id,id.startsWith('period')||id==='final'?'outline-blue':'soft')).join('')}</div>`;
-  const publishing=source===routeForClass(f.cls)?card(`<div class="btns">${btn('إعدادات عرض النتائج للطلبة','publish-settings','','outline-blue')}${supportsResultRules(source)?btn('إعداد قواعد النجاح','grading-settings'):''}</div><p class="small muted gap">${school().published[yearKey(f.year,f.cls,f.stream)]?'عرض النتائج مفعّل للصف المختار.':'عرض النتائج متوقف للصف المختار.'}</p>`,'التحكم في عرض النتائج للطلاب عبر الرابط'):'';
+  const publishing=source===routeForClass(f.cls)?card(`<div class="btns">${btn('إعدادات عرض النتائج للطلبة','publish-settings','','outline-blue')}${supportsResultRules(source,plan)?btn(plan.rules?'قواعد الدرجات والنجاح':'إعداد قواعد النجاح','grading-settings'):''}</div><p class="small muted gap">${school().published[yearKey(f.year,f.cls,f.stream)]?'عرض النتائج مفعّل للصف المختار.':'عرض النتائج متوقف للصف المختار.'}</p>`,'التحكم في عرض النتائج للطلاب عبر الرابط'):'';
   const raster=`<div class="report-buttons">${btn('طباعة الكشف العادي','grades-report','marks','outline-dark')}${btn('تحميل الكشف العادي (Excel)','grades-export','','outline-green')}${btn('طباعة الكشف المفصل','grades-report','detailed','outline-blue')}</div>`;
-  return header(title+' - الصف: '+f.cls,'','')+`<div class="grade-panes">
+  return header(title+' - الصف: '+f.cls,'',f.year)+`<div class="grade-panes">
     <div class="grid2">${card(filterForm(route,search,f),'الفلاتر')}${publishing}</div>${card(reportControls,'أدوات الطباعة والتقارير')}${card(raster,'كشف رصد الدرجات')}
     <div class="grid2">${card(filterForm(route,viewFields,f),source==='add_grades'?'التحكم في عرض أعمدة الفترات':'التحكم في عرض أعمدة الدرجات')}${card(`<div class="report-buttons">${btn('تصدير ملف الدرجات Excel','grades-export','','outline-green')}${btn('رفع الدرجات','grades-import','','outline-blue')}</div>`,'أدوات التصدير والاستيراد')}</div>
     ${gradeReview(view)}
@@ -3972,7 +4130,10 @@ forms['save-grades']=async(_data,form)=>{
   render();flash('حُفظ الرصد.');
 };
 function gradeColumns(view) {
-  return view.items.flatMap(item=>view.indexes.map(i=>({key:gradeKey(view.source,item.key,i),label:item.label+' / '+view.plan.components[i]})));
+  return view.items.flatMap(item=>view.indexes.map(i=>({
+    key:gradeKey(view.source,item.key,i),label:item.label+' / '+view.plan.components[i],
+    previousLabel:item.key==='u'?'التربية وعلم النفس / '+view.plan.components[i]:null
+  })));
 }
 function gradeRows(view) {
   const columns=gradeColumns(view);
@@ -3980,7 +4141,7 @@ function gradeRows(view) {
 }
 actions['grades-export']=()=>{
   const view=gradeView(), file=gradeRows(view);
-  downloadExcel('كشف درجات '+view.f.cls,file.headers,file.rows);
+  downloadExcel('كشف درجات '+view.f.cls+' '+view.f.year,[...file.headers,'السنة الدراسية'],file.rows.map(row=>[...row,view.f.year]));
 };
 actions['grades-import']=()=>{
   const view=gradeView();
@@ -3990,7 +4151,10 @@ forms['import-grades']=async data=>{
   const view=gradeView(), columns=gradeColumns(view);
   const rows=await readExcel(data.file), headings=rows.shift()||[];
   const regCol=headings.findIndex(h=>normalized(h)===normalized('رقم القيد'));
-  const entries=columns.map(c=>[c.key,headings.findIndex(h=>normalized(h)===normalized(c.label))]).filter(([,i])=>i>=0);
+  const yearCol=headings.findIndex(h=>normalized(h)===normalized('السنة الدراسية'));
+  if(regCol>=0&&yearCol>=0&&rows.some(row=>str(row[regCol])&&transferYear(row[yearCol])!==view.f.year))
+    throw new Error('اختر السنة الدراسية المكتوبة في الكشف قبل استيراد الدرجات.');
+  const entries=columns.map(c=>[c.key,headings.findIndex(h=>normalized(h)===normalized(c.label)||c.previousLabel&&normalized(h)===normalized(c.previousLabel))]).filter(([,i])=>i>=0);
   if(regCol<0||!entries.length)throw new Error('استخدم الكشف المصدّر من صفحة الرصد الحالية.');
   const byReg=new Map(view.all.map(s=>[digits(s.reg),s.id]));
   let n=0;
@@ -4007,11 +4171,16 @@ forms['import-grades']=async data=>{
   $('#modal').close();render();flash('حُفظت '+n+' درجة.');
 };
 function studentResult(student,s=school(),source=routeForClass(student.cls),indices=null) {
-  const plan=gradePlan(source,student.cls,student.stream);
+  const plan=gradePlan(source,student.cls,student.stream,student.year);
   const key=yearKey(student.year,student.cls,student.stream);
-  const summary=gradeSummary(plan,source,s.grades[student.id]||{},indices);
-  const assessment=classifyResult(summary,s.gradingRules?.[key]);
-  return {...summary,...assessment,status:indices?assessment.status:student.outcome||assessment.status,published:Boolean(s.published[key])};
+  const marks=s.grades[student.id]||{}, retake=source==='remedial_grades';
+  const mainSource=routeForClass(student.cls);
+  const summary=retake&&plan.rules?
+    gradeRetakeSummary(gradePlan(mainSource,student.cls,student.stream,student.year),mainSource,marks):
+    gradeSummary(plan,source,marks,indices);
+  const assessment=plan.rules?curriculumResult(summary,plan.rules,indices,retake):classifyResult(summary,s.gradingRules?.[key]);
+  const status=indices||retake?assessment.status:student.outcome||assessment.status;
+  return {...summary,...assessment,status,published:Boolean(s.published[key])};
 }
 actions['student-result']=id=>{
   const fromPublic=route==='parents'||route==='results';
@@ -4021,7 +4190,7 @@ actions['student-result']=id=>{
   const source=routeForClass(student.cls);
   const result=studentResult(student,s,source);
   if(fromPublic&&!result.published)throw new Error('النتيجة غير منشورة.');
-  const plan=gradePlan(source,student.cls,student.stream);
+  const plan=gradePlan(source,student.cls,student.stream,student.year);
   gradeCardReport({f:{year:student.year},source,plan,school:s},'صحيفة نتيجة الطالب',[{s:student,...result}],null,'final');
 };
 actions['publish-settings']=()=>{
@@ -4069,9 +4238,14 @@ actions['grades-report']=kind=>{
   if(['top','passed','remedial'].includes(type)) {
     let rows=summaries;
     if(type==='top')rows=rows.filter(x=>x.percent!==null).sort((a,b)=>b.percent-a.percent||localeCompare(a.s.name,b.s.name)).slice(0,10);
-    if(kind==='passed')rows=rows.filter(x=>x.status==='ناجح');
+    if(kind==='passed')rows=rows.filter(x=>['ناجح','منقول'].includes(x.status));
     if(kind==='remedial')rows=rows.filter(x=>x.status==='دور ثان');
     return schoolListReport(title,view.f.year,['رقم القيد','اسم الطالب','المجموع','النسبة','الحالة'],[{rows:rows.map(x=>[x.s.reg,x.s.name,x.complete?x.total:'—',x.percent??'—',x.status||'—'])}]);
+  }
+  if(type==='final'&&view.source==='remedial_grades'&&view.plan.rules){
+    const columns=['رقم القيد','اسم الطالب',...view.plan.items.map(item=>item.label),'المجموع','النسبة','الحالة'];
+    const rows=summaries.map(row=>[row.s.reg,row.s.name,...row.rows.map(item=>item[1]),row.complete?row.total:'—',row.percent??'—',row.status||'غير مكتمل']);
+    return schoolListReport('نتائج الدور الثاني بعد احتساب أعمال السنة',view.f.year,columns,[{rows}],{orientation:'أفقي',fontSize:10,rowsPerPage:18});
   }
   if(['weak','needed','rate','subject-count'].includes(type))return outcomeReport(type,title,view.f.year,summaries);
   if(['period','final','periods','double'].includes(type))return gradeCardReport(view,title,summaries,indices,type);
@@ -4081,7 +4255,7 @@ function blindScreen(barcode) {
   const title=barcode?'رصد درجات الامتحان بالباركود':'رصد درجات الامتحان باستخدام الرقم السري';
   const f=filterData(route,{cls:'السادس'});
   if(!CLASSES.slice(7,10).includes(f.cls))f.cls='السادس';
-  const plan=gradePlan('student-grades-sse',f.cls,'');
+  const plan=gradePlan('student-grades-sse',f.cls,'',f.year);
   const allowed=CLASSES.slice(7,10);
   return header(title,'',f.year)+card(filterForm(route,[FILTER_YEAR,['cls','الصف',allowed]],f))+
     card(`<form data-form="blind-search" data-mode="${barcode?'barcode':'secret'}" class="stack">${field(['subject','المادة',plan.items.map(i=>[i.key,i.label]),true])}${field(['period','الفصل الدراسي',[['1','الفصل الأول'],['3','الفصل الثاني']],true])}${field(['code',barcode?'أدخل رمز الباركود هنا':'الرقم السري','text',true],'',{inputmode:'numeric'})}${submit('بحث')}</form>`);
@@ -4093,7 +4267,7 @@ forms['blind-search']=(data,form)=>{
   if(!CLASSES.slice(7,10).includes(f.cls))f.cls='السادس';
   const code=digits(data.code), found=activeStudents(f.year).find(s=>s.cls===f.cls&&str(school().hall[s.id]?.[form.dataset.mode==='barcode'?'seat':'secret'])===code);
   if(!found)throw new Error('لم يُعثر على رقم مطابق في توزيع القاعات.');
-  const item=gradePlan('student-grades-sse',found.cls,found.stream).items.find(i=>i.key===data.subject);
+  const item=gradePlan('student-grades-sse',found.cls,found.stream,found.year).items.find(i=>i.key===data.subject);
   const index=Number(data.period), key=gradeKey('student-grades-sse',item.key,index);
   showDialog('رصد درجة الامتحان',`<form data-form="blind-save" data-id="${esc(found.id)}" data-key="${esc(key)}" class="stack"><p>${esc(item.label)} · رمز الورقة <bdi>${esc(code)}</bdi></p>${field(['mark','الدرجة','number',true],school().grades[found.id]?.[key],{min:0,max:item.max[index],step:.1})}${submit('حفظ الدرجة')}</form>`);
 };
@@ -4249,7 +4423,7 @@ actions['cases-report']=kind=>{
 function bookView() {
   const f=filterData('books-receipt',{cls:'السابع'}), cls=f.cls||'السابع';
   const key=yearKey(f.year,cls,f.stream);
-  const defaults=gradePlan(routeForClass(cls),cls,f.stream).items.map(item=>({key:item.key,label:item.label,group:''}));
+  const defaults=gradePlan(routeForClass(cls),cls,f.stream,f.year).items.map(item=>({key:item.key,label:item.label,group:''}));
   return {f,cls,key,items:school().bookTemplates[key]||defaults,rows:filterStudents({...f,cls})};
 }
 pages['books-receipt']=()=>{
@@ -4320,7 +4494,7 @@ function verticalView() {
   const page='vertical-grades';
   const f=filterData(page,{cls:'الأول',stream:'علمي',subject:'',type:'',limit:'10',sort:'section_name'});
   const source=routeForClass(f.cls), stream=['الثاني ثانوي','الثالث ثانوي'].includes(f.cls)?f.stream||'علمي':'';
-  const plan=gradePlan(source,f.cls,stream), types=verticalTypes(source,plan);
+  const plan=gradePlan(source,f.cls,stream,f.year), types=verticalTypes(source,plan);
   const type=types.find(([key])=>key===f.type)||types[0], item=plan.items.find(x=>x.key===f.subject);
   const rows=item?activeStudents(f.year).filter(x=>x.cls===f.cls&&(!stream||x.stream===stream)&&finds(x.name,f.q)):[];
   const compare=(a,b)=>{
@@ -4419,7 +4593,7 @@ function queueVerticalSave(el) {
   if(prior?.value===value||!prior&&value===saved)return;
   const [source,subject,indexText]=key.split('|'), index=Number(indexText);
   const snapshot=school().students.find(row=>row.id===student);
-  const item=snapshot&&gradePlan(source,snapshot.cls,snapshot.stream).items.find(row=>row.key===subject);
+  const item=snapshot&&gradePlan(source,snapshot.cls,snapshot.stream,snapshot.year).items.find(row=>row.key===subject);
   if(!item)return;
   try{validatedGrade(value,item,index);}
   catch(error){el.setAttribute('aria-invalid','true');el.dataset.saveState='error';flash(error.message,'error');return;}
@@ -4763,7 +4937,7 @@ forms['exam-schedule']=async data=>{
     if(!days.length)throw new Error('حدد أيام دوام في إدارة الأيام الدراسية.');
     const rows=[];
     for(const cls of classes) {
-      const subjects=gradePlan(routeForClass(cls),cls,'علمي').items;
+      const subjects=gradePlan(routeForClass(cls),cls,'علمي',data.year).items;
       let date=data.start;
       for(const subject of subjects) {
         while(!days.includes(DAYS[new Date(date+'T12:00:00').getDay()])||holidays.has(date))date=shiftDate(date,1);
@@ -5757,12 +5931,32 @@ forms['guardian-code']=async(data,form)=>{
 };
 
 
-const supportsResultRules=source=>['add_grades','student-grades-sse','student-grades-first-secondary','student-grades-second-secondary'].includes(source);
+const supportsResultRules=(source,plan)=>plan.rules||['add_grades','student-grades-sse','student-grades-first-secondary','student-grades-second-secondary'].includes(source);
 actions['grading-settings']=()=>{
-  const {f,source}=gradeView();
-  if(!supportsResultRules(source))throw new Error('هذه الشاشة تعرض الرصد دون احتساب نتيجة نهائية.');
+  const {f,source,plan}=gradeView();
+  if(!supportsResultRules(source,plan))throw new Error('اختر كشفًا يتضمن قواعد النجاح.');
+  const heading=`<p>${esc(f.cls)}${f.stream?' · '+esc(f.stream):''} · <bdi>${esc(f.year)}</bdi></p>`;
+  if(plan.rules){
+    const {rules}=plan, sample=plan.items[0];
+    const finalLabel=plan.certificate?'امتحان نهاية العام':'مجموع امتحاني الفصلين';
+    const guidance=rules.autoPromote?'النتيجة الدراسية منقول بعد اكتمال التقييم. تعتمد الإدارة حالات الإعادة والاستثناء.':
+      `يشترط ${rules.minTotal*100}% من الدرجة الكبرى لكل مادة${sample.minFinal===null?'':' و'+rules.minFinal*100+'% من '+finalLabel}.`;
+    const threshold=[...(sample.minFinal!==null?['أدنى '+finalLabel]:[]),...(sample.minTotal!==null?['أدنى المجموع']:[])];
+    const rows=plan.items.map(item=>[item.label,item.weeklyPeriods,...item.max,item.totalMax,
+      ...(item.minFinal!==null?[item.minFinal]:[]),...(item.minTotal!==null?[item.minTotal]:[]),
+      ...(rules.autoPromote?[]:[item.secondRoundMax])]);
+    const columns=['المادة','الحصص أسبوعيًا',...plan.components,'الدرجة الكبرى',...threshold,...(rules.autoPromote?[]:['امتحان الدور الثاني'])];
+    const details=plan.items.flatMap(item=>{
+      const work=item.workBreakdown;
+      if(f.cls==='السادس'&&item.key==='s'&&work)return [`علوم السادس في كل فصل: الأنشطة ${work.activities}، التطبيقات ${work.quizzes}، وامتحان منتصف الفصل ${work.midterm}. مجموع الأعمال ${item.max[0]}.`];
+      return item.parts?[`توزيع درجة ${item.label}: ${item.parts.map(part=>part.label+' '+part.max).join('، ')}.`]:[];
+    });
+    const parts=details.map(note=>'<p class="muted small">'+esc(note)+'</p>').join('');
+    const retake=rules.maxSecondRoundSubjects?`<p class="muted small">الدور الثاني للراسبين في ثلاث مواد على الأكثر وفق الدرجات.</p>`:'';
+    return showDialog('قواعد الدرجات والنجاح',`<div class="stack">${heading}<p>${esc(guidance)}</p>${table(columns,rows,{name:'حدود الدرجات والنجاح'})}${parts}${retake}<p class="muted small">يحسب التقرير نتيجة الدرجات المكتملة. تعتمد المدرسة المواظبة والأعذار وحالات الاستثناء.</p></div>`,'report');
+  }
   const key=yearKey(f.year,f.cls,f.stream), rule=school().gradingRules[key]||{overall:50,subject:50,remedial:2};
-  showDialog('إعداد قواعد النجاح',`<p>${esc(f.cls)} · <bdi>${esc(f.year)}</bdi></p><p class="muted small">تُستخدم القيم التي تعتمدها المدرسة لهذا الصف في التقارير. السجل الناقص لا يدخل في احتساب الحالة.</p><form data-form="grading-rules" data-key="${esc(key)}" class="stack">
+  showDialog('إعداد قواعد النجاح',heading+`<p class="muted small">تُستخدم القيم التي تعتمدها المدرسة لهذا الصف في التقارير. السجل الناقص لا يدخل في احتساب الحالة.</p><form data-form="grading-rules" data-key="${esc(key)}" class="stack">
     ${field(['enabled','تفعيل الاحتساب الآلي للحالة','checkbox'],rule.enabled)}${field(['overall','الحد الأدنى للمعدل العام (%)','number',true],rule.overall,{min:0,max:100,step:.1})}${field(['subject','الحد الأدنى لكل مادة (%)','number',true],rule.subject,{min:0,max:100,step:.1})}${field(['remedial','أقصى عدد مواد للدور الثاني','number',true],rule.remedial,{min:0,max:20})}${submit('حفظ القواعد')}</form>`);
 };
 forms['grading-rules']=async(data,form)=>{
@@ -5774,7 +5968,7 @@ forms['grading-rules']=async(data,form)=>{
 function outcomeReport(kind,title,year,summaries) {
   if(kind==='rate'){
     const counted=summaries.filter(x=>x.complete&&x.status);
-    const rows=['ناجح','دور ثان','راسب'].map(status=>{
+    const rows=[...(counted.some(x=>x.status==='منقول')?['منقول']:[]),'ناجح','دور ثان','راسب'].map(status=>{
       const n=counted.filter(x=>x.status===status).length;
       return [status,n,counted.length?(100*n/counted.length).toFixed(2)+'%':'—'];
     });
@@ -5794,7 +5988,8 @@ function gradePaperPeriods(view,indices) {
   const labels=primary?['الفترة الأولى (30%)','الفترة الثانية (30%)','الفترة الثالثة (40%)']:view.plan.components;
   if(indices)return [{label:primary?labels[indices[0]].split(' (')[0]:indices.length===1?labels[indices[0]]:indices[0]===0?'الفصل الأول':'الفصل الثاني',indices}];
   const groups=primary||labels.length!==4?labels.map((label,i)=>({label,indices:[i]})):[{label:'الفصل الأول',indices:[0,1]},{label:'الفصل الثاني',indices:[2,3]}];
-  return [...groups,{label:'النتيجة النهائية (100%)',indices:null}];
+  const worksOnly=['student-grades-ninth','student-grades-third-secondary'].includes(view.source)&&!view.plan.certificate;
+  return [...groups,{label:worksOnly?'مجموع أعمال السنة':'النتيجة النهائية (100%)',indices:null}];
 }
 function gradePaperMarks(view,student,groups) {
   const marks=(view.school||school()).grades[student.id]||{};
@@ -5806,7 +6001,7 @@ function gradePaperMarks(view,student,groups) {
   return `<table class="school-paper-table grade-marks" aria-label="درجات التلميذ"><colgroup><col>${'<col>'.repeat(groups.length*2)}</colgroup><thead>${header}</thead><tbody>${rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value)+'</td>').join('')+'</tr>').join('')}</tbody></table>`;
 }
 function gradePaperActivity(view,student,groups) {
-  const activity=gradePlan('add_activity_grades',student.cls,student.stream);
+  const activity=gradePlan('add_activity_grades',student.cls,student.stream,student.year);
   const grades=(view.school||school()).grades[student.id]||{};
   const periodGroups=groups.filter(group=>group.indices);
   const rows=activity.items.filter(item=>item.choices).map(item=>[item.label,...periodGroups.map(group=>{
@@ -6533,7 +6728,7 @@ function transferMappingForm() {
       `<select name="column!${i}" data-transfer-column aria-label="${esc('مطابقة العمود '+(i+1)+' · '+label)}">${options(columns,transferInbox.mapping[i],'تجاهل العمود')}</select>`+
       (selected?.item?.max&&!selected.item.choices?'<small class="muted">الدرجة الكبرى في المنظومة <bdi>'+selected.item.max[selected.index]+'</bdi></small>':''))];
   }),{className:'transfer-table'});
-  const note=grades?'<p class="muted small">طابق أعمال السنة والامتحان كلًا مع خانته. إذا ظهر اختلاف في الدرجة الكبرى، تحقق من العمود قبل اختيار التحويل.</p>':'';
+  const note=grades?'<p class="muted small">طابق أعمال السنة والامتحان كلًا مع خانته. عند اختلاف الدرجة الكبرى، راجع السنة الدراسية والعمود قبل اختيار التحويل.</p>':'';
   return card(`<div class="toolbar"><p class="muted small">${rows.length} سجل · ${headers.length} عمود${transferInbox.source?' · '+esc(transferInbox.source):''}</p>
     ${btn('مسح الجدول','transfer-clear','','tiny soft')}</div>
     <form data-form="transfer-preview" class="stack">${note}${mapping}<div class="btns">${submit('معاينة الاستيراد','outline-blue')}${btn('مطابقة تلقائية','transfer-auto','','soft')}</div></form>`,'مطابقة الأعمدة');
@@ -6591,6 +6786,10 @@ document.addEventListener('change',event=>{
   if(transferSettings.kind==='activities'&&!CLASSES.slice(2).includes(transferSettings.cls))transferSettings.cls='';
   if(transferInbox&&['kind','cls','stream'].includes(control.name))
     transferInbox.mapping=transferSuggestedMapping(transferInbox.table.headers,transferFields(currentTransferScope()));
+  if(transferInbox&&control.name==='year'){
+    const keys=new Set(transferFields(currentTransferScope()).map(field=>field.key));
+    transferInbox.mapping=transferInbox.mapping.map(key=>keys.has(key)?key:'');
+  }
   transferReview=null;
   transferRefresh(control.name);
 });

@@ -17,12 +17,16 @@ export const TEACHER_NOTE_TYPES=[['تشجيع وتميز','تشجيع وتميز
 export const TEACHER_ATTACHMENT_LIMIT=5_000_000;
 const teacherNormalize=value=>String(value??'').trim().replace(/[أإآ]/g,'ا').replace(/[\u064b-\u065fـ]/g,'').replace(/[^\p{L}\p{N}]/gu,'');
 function teacherSubject(assignment,stream) {
-  const source=routeForClass(assignment.cls), main=gradePlan(source,assignment.cls,stream);
+  const source=routeForClass(assignment.cls), main=gradePlan(source,assignment.cls,stream,assignment.year);
   const subject=teacherNormalize(assignment.label);
-  const alias=subject===teacherNormalize('اللغة العربية')&&assignment.cls==='التاسع'?'a':subject===teacherNormalize('الكتابة')?'w':null;
-  const item=main.items.find(x=>x.key===alias||teacherNormalize(x.label)===subject);
+  const aliases={
+    a:['العربية','اللغة العربية','النحو والقراءة والنصوص','اللغة العربية (النحو والقراءة والنصوص)'],
+    w:['الكتابة','التعبير والإملاء والخط'],g:['الاجتماعيات','المواد الاجتماعية'],
+    u:['علم النفس','التربية وعلم النفس'],p:['الفيزياء (الحرارية والميكانيكا)','الفيزياء (الكهرباء والميكانيكا)']
+  };
+  const item=main.items.find(x=>[x.label,...(aliases[x.key]||[])].some(name=>teacherNormalize(name)===subject));
   if(item)return {source,plan:main,item};
-  const activity=gradePlan('add_activity_grades',assignment.cls,stream);
+  const activity=gradePlan('add_activity_grades',assignment.cls,stream,assignment.year);
   const activityItem=activity.items.find(x=>x.choices&&teacherNormalize(x.label)===subject);
   return activityItem?{source:'add_activity_grades',plan:activity,item:activityItem}:null;
 }
@@ -71,8 +75,9 @@ function teacherRoster(s,group) {
 function gradeFieldsFor(s,group,stream) {
   const plan=teacherSubject(group,stream);
   if(!plan)return [];
-  const {source,item,plan:{components}}=plan;
-  const indexes=components.length===4?[0,2]:components.map((_,i)=>i);
+  const {source,item,plan:{components,rules}}=plan;
+  const exams=rules?.finalIndexes||(components.length===4?[1,3]:[]);
+  const indexes=components.map((_,i)=>i).filter(i=>!exams.includes(i));
   return indexes.map(index=>({index,label:components[index],key:gradeKey(source,item.key,index),max:item.choices?null:item.max[index],choices:item.choices||[],locked:teacherMarkLocked(s,group,item,components,index)}));
 }
 const teacherAttendanceKey=(group,date,lesson)=>[group.id,date,lesson].join('|');

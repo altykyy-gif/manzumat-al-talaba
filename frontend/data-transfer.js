@@ -68,7 +68,7 @@ function transferMappingForm() {
       `<select name="column!${i}" data-transfer-column aria-label="${esc('مطابقة العمود '+(i+1)+' · '+label)}">${options(columns,transferInbox.mapping[i],'تجاهل العمود')}</select>`+
       (selected?.item?.max&&!selected.item.choices?'<small class="muted">الدرجة الكبرى في المنظومة <bdi>'+selected.item.max[selected.index]+'</bdi></small>':''))];
   }),{className:'transfer-table'});
-  const note=grades?'<p class="muted small">طابق أعمال السنة والامتحان كلًا مع خانته. إذا ظهر اختلاف في الدرجة الكبرى، تحقق من العمود قبل اختيار التحويل.</p>':'';
+  const note=grades?'<p class="muted small">طابق أعمال السنة والامتحان كلًا مع خانته. عند اختلاف الدرجة الكبرى، راجع السنة الدراسية والعمود قبل اختيار التحويل.</p>':'';
   return card(`<div class="toolbar"><p class="muted small">${rows.length} سجل · ${headers.length} عمود${transferInbox.source?' · '+esc(transferInbox.source):''}</p>
     ${btn('مسح الجدول','transfer-clear','','tiny soft')}</div>
     <form data-form="transfer-preview" class="stack">${note}${mapping}<div class="btns">${submit('معاينة الاستيراد','outline-blue')}${btn('مطابقة تلقائية','transfer-auto','','soft')}</div></form>`,'مطابقة الأعمدة');
@@ -126,6 +126,10 @@ document.addEventListener('change',event=>{
   if(transferSettings.kind==='activities'&&!CLASSES.slice(2).includes(transferSettings.cls))transferSettings.cls='';
   if(transferInbox&&['kind','cls','stream'].includes(control.name))
     transferInbox.mapping=transferSuggestedMapping(transferInbox.table.headers,transferFields(currentTransferScope()));
+  if(transferInbox&&control.name==='year'){
+    const keys=new Set(transferFields(currentTransferScope()).map(field=>field.key));
+    transferInbox.mapping=transferInbox.mapping.map(key=>keys.has(key)?key:'');
+  }
   transferReview=null;
   transferRefresh(control.name);
 });

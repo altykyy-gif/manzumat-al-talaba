@@ -35,7 +35,7 @@ export function makeDemo() {
   sample.assignments = sample.subjects.map((subject,i)=>({id:'assign-'+i,year:YEAR,cls:subject.cls,section:SECTIONS[0],shift:'صباحية',subject:subject.id,teacher:sample.staff[i%3].id,lessons:subject.lessons,date:dayISO()}));
   sample.schedules[yearKey(YEAR,'الثاني',SECTIONS[0])+'|صباحية']={year:YEAR,cls:'الثاني',section:SECTIONS[0],shift:'صباحية',type:'auto',slots:{'الأحد|0':{subject:'sub-الثاني-0',teacher:'staff-0'},'الاثنين|2':{subject:'sub-الثاني-0',teacher:'staff-0'}}};
   for(const student of sample.students) {
-    const gradeRoute=routeForClass(student.cls), plan=gradePlan(gradeRoute,student.cls,student.stream);
+    const gradeRoute=routeForClass(student.cls), plan=gradePlan(gradeRoute,student.cls,student.stream,student.year);
     sample.grades[student.id]={};
     for(const item of plan.items) plan.components.forEach((_,i)=>{
       sample.grades[student.id][gradeKey(gradeRoute,item.key,i)]=item.choices?item.choices[(i+1)%item.choices.length]:Math.round(item.max[i]*(.72+(Number(student.reg)%5)/20)*10)/10;
@@ -43,8 +43,6 @@ export function makeDemo() {
   }
   sample.published[yearKey(YEAR,'الثاني')]=true;
   sample.published[yearKey(YEAR,'السابع')]=true;
-  sample.gradingRules[yearKey(YEAR,'الثاني')]={enabled:true,overall:50,subject:50,remedial:2};
-  sample.gradingRules[yearKey(YEAR,'السابع')]={enabled:true,overall:50,subject:50,remedial:2};
   sample.fees[yearKey(YEAR,'الثاني')]=500_000;
   sample.receipts.push({id:'demo-receipt',student:'sample-1',year:YEAR,amount:150_000,date:dayISO(),method:'نقدي',note:'دفعة تجريبية',number:1});
   sample.items.push({id:'demo-item',name:'وجبة تجريبية',price:2500,stock:20});

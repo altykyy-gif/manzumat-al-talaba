@@ -1,6 +1,6 @@
 const allowedClasses={
   add_kindergarten_grades:CLASSES.slice(0,2),add_grades:CLASSES.slice(2,7),add_activity_grades:CLASSES.slice(2), 
-  'student-grades-sse':CLASSES.slice(7,10),remedial_grades:REMEDIAL_CLASSES,'student-grades-ninth':['التاسع'],
+  'student-grades-sse':CLASSES.slice(7,10),remedial_grades:CLASSES.slice(5),'student-grades-ninth':['التاسع'],
   'student-grades-first-secondary':['الأول ثانوي'],'student-grades-second-secondary':['الثاني ثانوي'],
   'student-grades-third-secondary':['الثالث ثانوي']
 };
@@ -8,13 +8,13 @@ const gradeDraft = new Map();
 const gradeSelected=new Map();
 const draftKey=(id,key)=>[activeSchoolId,id,key].join('!');
 function gradeView(page=route) {
-  const classes=allowedClasses[page];
-  const f=filterData(page,{cls:page==='remedial_grades'?'السادس':classes[0],limit:'10',stream:'علمي',subject:'',component:''});
+  const f=filterData(page,{cls:page==='remedial_grades'?'السادس':allowedClasses[page][0],limit:'10',stream:'علمي',subject:'',component:''});
+  const classes=page==='remedial_grades'?remedialClasses(f.year):allowedClasses[page];
   if(!classes.includes(f.cls))f.cls=classes[0];
   if(!['الثاني ثانوي','الثالث ثانوي'].includes(f.cls))f.stream='';
   else if(!f.stream)f.stream='علمي';
   const source=page;
-  const plan=gradePlan(source,f.cls,f.stream);
+  const plan=gradePlan(source,f.cls,f.stream,f.year);
   const all=filterStudents(f);
   const items=f.subject?plan.items.filter(item=>item.key===f.subject):plan.items;
   const indexes=plan.components.map((_,i)=>i).filter(i=>f.component===''||Number(f.component)===i);
@@ -86,9 +86,9 @@ function gradePage() {
   const reports=gradeReportChoices(source,plan);
   const draftCount=[...gradeDraft.values()].filter(entry=>entry.school===activeSchoolId&&entry.key.startsWith(source+'|')).length;
   const reportControls=`<div class="report-buttons">${reports.map(([id,label])=>btn(label,'grades-report',id,id.startsWith('period')||id==='final'?'outline-blue':'soft')).join('')}</div>`;
-  const publishing=source===routeForClass(f.cls)?card(`<div class="btns">${btn('إعدادات عرض النتائج للطلبة','publish-settings','','outline-blue')}${supportsResultRules(source)?btn('إعداد قواعد النجاح','grading-settings'):''}</div><p class="small muted gap">${school().published[yearKey(f.year,f.cls,f.stream)]?'عرض النتائج مفعّل للصف المختار.':'عرض النتائج متوقف للصف المختار.'}</p>`,'التحكم في عرض النتائج للطلاب عبر الرابط'):'';
+  const publishing=source===routeForClass(f.cls)?card(`<div class="btns">${btn('إعدادات عرض النتائج للطلبة','publish-settings','','outline-blue')}${supportsResultRules(source,plan)?btn(plan.rules?'قواعد الدرجات والنجاح':'إعداد قواعد النجاح','grading-settings'):''}</div><p class="small muted gap">${school().published[yearKey(f.year,f.cls,f.stream)]?'عرض النتائج مفعّل للصف المختار.':'عرض النتائج متوقف للصف المختار.'}</p>`,'التحكم في عرض النتائج للطلاب عبر الرابط'):'';
   const raster=`<div class="report-buttons">${btn('طباعة الكشف العادي','grades-report','marks','outline-dark')}${btn('تحميل الكشف العادي (Excel)','grades-export','','outline-green')}${btn('طباعة الكشف المفصل','grades-report','detailed','outline-blue')}</div>`;
-  return header(title+' - الصف: '+f.cls,'','')+`<div class="grade-panes">
+  return header(title+' - الصف: '+f.cls,'',f.year)+`<div class="grade-panes">
     <div class="grid2">${card(filterForm(route,search,f),'الفلاتر')}${publishing}</div>${card(reportControls,'أدوات الطباعة والتقارير')}${card(raster,'كشف رصد الدرجات')}
     <div class="grid2">${card(filterForm(route,viewFields,f),source==='add_grades'?'التحكم في عرض أعمدة الفترات':'التحكم في عرض أعمدة الدرجات')}${card(`<div class="report-buttons">${btn('تصدير ملف الدرجات Excel','grades-export','','outline-green')}${btn('رفع الدرجات','grades-import','','outline-blue')}</div>`,'أدوات التصدير والاستيراد')}</div>
     ${gradeReview(view)}
@@ -115,7 +115,10 @@ forms['save-grades']=async(_data,form)=>{
   render();flash('حُفظ الرصد.');
 };
 function gradeColumns(view) {
-  return view.items.flatMap(item=>view.indexes.map(i=>({key:gradeKey(view.source,item.key,i),label:item.label+' / '+view.plan.components[i]})));
+  return view.items.flatMap(item=>view.indexes.map(i=>({
+    key:gradeKey(view.source,item.key,i),label:item.label+' / '+view.plan.components[i],
+    previousLabel:item.key==='u'?'التربية وعلم النفس / '+view.plan.components[i]:null
+  })));
 }
 function gradeRows(view) {
   const columns=gradeColumns(view);
@@ -123,7 +126,7 @@ function gradeRows(view) {
 }
 actions['grades-export']=()=>{
   const view=gradeView(), file=gradeRows(view);
-  downloadExcel('كشف درجات '+view.f.cls,file.headers,file.rows);
+  downloadExcel('كشف درجات '+view.f.cls+' '+view.f.year,[...file.headers,'السنة الدراسية'],file.rows.map(row=>[...row,view.f.year]));
 };
 actions['grades-import']=()=>{
   const view=gradeView();
@@ -133,7 +136,10 @@ forms['import-grades']=async data=>{
   const view=gradeView(), columns=gradeColumns(view);
   const rows=await readExcel(data.file), headings=rows.shift()||[];
   const regCol=headings.findIndex(h=>normalized(h)===normalized('رقم القيد'));
-  const entries=columns.map(c=>[c.key,headings.findIndex(h=>normalized(h)===normalized(c.label))]).filter(([,i])=>i>=0);
+  const yearCol=headings.findIndex(h=>normalized(h)===normalized('السنة الدراسية'));
+  if(regCol>=0&&yearCol>=0&&rows.some(row=>str(row[regCol])&&transferYear(row[yearCol])!==view.f.year))
+    throw new Error('اختر السنة الدراسية المكتوبة في الكشف قبل استيراد الدرجات.');
+  const entries=columns.map(c=>[c.key,headings.findIndex(h=>normalized(h)===normalized(c.label)||c.previousLabel&&normalized(h)===normalized(c.previousLabel))]).filter(([,i])=>i>=0);
   if(regCol<0||!entries.length)throw new Error('استخدم الكشف المصدّر من صفحة الرصد الحالية.');
   const byReg=new Map(view.all.map(s=>[digits(s.reg),s.id]));
   let n=0;
@@ -150,11 +156,16 @@ forms['import-grades']=async data=>{
   $('#modal').close();render();flash('حُفظت '+n+' درجة.');
 };
 function studentResult(student,s=school(),source=routeForClass(student.cls),indices=null) {
-  const plan=gradePlan(source,student.cls,student.stream);
+  const plan=gradePlan(source,student.cls,student.stream,student.year);
   const key=yearKey(student.year,student.cls,student.stream);
-  const summary=gradeSummary(plan,source,s.grades[student.id]||{},indices);
-  const assessment=classifyResult(summary,s.gradingRules?.[key]);
-  return {...summary,...assessment,status:indices?assessment.status:student.outcome||assessment.status,published:Boolean(s.published[key])};
+  const marks=s.grades[student.id]||{}, retake=source==='remedial_grades';
+  const mainSource=routeForClass(student.cls);
+  const summary=retake&&plan.rules?
+    gradeRetakeSummary(gradePlan(mainSource,student.cls,student.stream,student.year),mainSource,marks):
+    gradeSummary(plan,source,marks,indices);
+  const assessment=plan.rules?curriculumResult(summary,plan.rules,indices,retake):classifyResult(summary,s.gradingRules?.[key]);
+  const status=indices||retake?assessment.status:student.outcome||assessment.status;
+  return {...summary,...assessment,status,published:Boolean(s.published[key])};
 }
 actions['student-result']=id=>{
   const fromPublic=route==='parents'||route==='results';
@@ -164,7 +175,7 @@ actions['student-result']=id=>{
   const source=routeForClass(student.cls);
   const result=studentResult(student,s,source);
   if(fromPublic&&!result.published)throw new Error('النتيجة غير منشورة.');
-  const plan=gradePlan(source,student.cls,student.stream);
+  const plan=gradePlan(source,student.cls,student.stream,student.year);
   gradeCardReport({f:{year:student.year},source,plan,school:s},'صحيفة نتيجة الطالب',[{s:student,...result}],null,'final');
 };
 actions['publish-settings']=()=>{
@@ -212,9 +223,14 @@ actions['grades-report']=kind=>{
   if(['top','passed','remedial'].includes(type)) {
     let rows=summaries;
     if(type==='top')rows=rows.filter(x=>x.percent!==null).sort((a,b)=>b.percent-a.percent||localeCompare(a.s.name,b.s.name)).slice(0,10);
-    if(kind==='passed')rows=rows.filter(x=>x.status==='ناجح');
+    if(kind==='passed')rows=rows.filter(x=>['ناجح','منقول'].includes(x.status));
     if(kind==='remedial')rows=rows.filter(x=>x.status==='دور ثان');
     return schoolListReport(title,view.f.year,['رقم القيد','اسم الطالب','المجموع','النسبة','الحالة'],[{rows:rows.map(x=>[x.s.reg,x.s.name,x.complete?x.total:'—',x.percent??'—',x.status||'—'])}]);
+  }
+  if(type==='final'&&view.source==='remedial_grades'&&view.plan.rules){
+    const columns=['رقم القيد','اسم الطالب',...view.plan.items.map(item=>item.label),'المجموع','النسبة','الحالة'];
+    const rows=summaries.map(row=>[row.s.reg,row.s.name,...row.rows.map(item=>item[1]),row.complete?row.total:'—',row.percent??'—',row.status||'غير مكتمل']);
+    return schoolListReport('نتائج الدور الثاني بعد احتساب أعمال السنة',view.f.year,columns,[{rows}],{orientation:'أفقي',fontSize:10,rowsPerPage:18});
   }
   if(['weak','needed','rate','subject-count'].includes(type))return outcomeReport(type,title,view.f.year,summaries);
   if(['period','final','periods','double'].includes(type))return gradeCardReport(view,title,summaries,indices,type);
@@ -224,7 +240,7 @@ function blindScreen(barcode) {
   const title=barcode?'رصد درجات الامتحان بالباركود':'رصد درجات الامتحان باستخدام الرقم السري';
   const f=filterData(route,{cls:'السادس'});
   if(!CLASSES.slice(7,10).includes(f.cls))f.cls='السادس';
-  const plan=gradePlan('student-grades-sse',f.cls,'');
+  const plan=gradePlan('student-grades-sse',f.cls,'',f.year);
   const allowed=CLASSES.slice(7,10);
   return header(title,'',f.year)+card(filterForm(route,[FILTER_YEAR,['cls','الصف',allowed]],f))+
     card(`<form data-form="blind-search" data-mode="${barcode?'barcode':'secret'}" class="stack">${field(['subject','المادة',plan.items.map(i=>[i.key,i.label]),true])}${field(['period','الفصل الدراسي',[['1','الفصل الأول'],['3','الفصل الثاني']],true])}${field(['code',barcode?'أدخل رمز الباركود هنا':'الرقم السري','text',true],'',{inputmode:'numeric'})}${submit('بحث')}</form>`);
@@ -236,7 +252,7 @@ forms['blind-search']=(data,form)=>{
   if(!CLASSES.slice(7,10).includes(f.cls))f.cls='السادس';
   const code=digits(data.code), found=activeStudents(f.year).find(s=>s.cls===f.cls&&str(school().hall[s.id]?.[form.dataset.mode==='barcode'?'seat':'secret'])===code);
   if(!found)throw new Error('لم يُعثر على رقم مطابق في توزيع القاعات.');
-  const item=gradePlan('student-grades-sse',found.cls,found.stream).items.find(i=>i.key===data.subject);
+  const item=gradePlan('student-grades-sse',found.cls,found.stream,found.year).items.find(i=>i.key===data.subject);
   const index=Number(data.period), key=gradeKey('student-grades-sse',item.key,index);
   showDialog('رصد درجة الامتحان',`<form data-form="blind-save" data-id="${esc(found.id)}" data-key="${esc(key)}" class="stack"><p>${esc(item.label)} · رمز الورقة <bdi>${esc(code)}</bdi></p>${field(['mark','الدرجة','number',true],school().grades[found.id]?.[key],{min:0,max:item.max[index],step:.1})}${submit('حفظ الدرجة')}</form>`);
 };
@@ -392,7 +408,7 @@ actions['cases-report']=kind=>{
 function bookView() {
   const f=filterData('books-receipt',{cls:'السابع'}), cls=f.cls||'السابع';
   const key=yearKey(f.year,cls,f.stream);
-  const defaults=gradePlan(routeForClass(cls),cls,f.stream).items.map(item=>({key:item.key,label:item.label,group:''}));
+  const defaults=gradePlan(routeForClass(cls),cls,f.stream,f.year).items.map(item=>({key:item.key,label:item.label,group:''}));
   return {f,cls,key,items:school().bookTemplates[key]||defaults,rows:filterStudents({...f,cls})};
 }
 pages['books-receipt']=()=>{
