@@ -69,10 +69,14 @@ const staffReports={
   financial:['كشف الأرقام المالية',['education','name','financial','job','grade','status']],
   qualifications:['كشف المؤهلات العلمية',['education','name','qualification','university','graduate','job']],
   contact:['كشف بيانات الاتصال',['education','name','job','phone','address']],
+  continuity:['كشف استمرارية العمل',['education','name','job','shift','status']],
   stats:['إحصائية العاملين',[]]
 };
+function staffContinuityRows(rows) {
+  return rows.filter(person=>['يعمل','مستمر','على رأس العمل','مباشر'].includes(person.status));
+}
 actions['staff-report']=kind=>{
-  if(!Object.hasOwn(staffReports,kind))return showDialog('أدوات الطباعة والتقارير',`<div class="report-buttons">${Object.entries(staffReports).map(([key,[label]])=>btn(label,'staff-report',key,'outline-blue')).join('')}${link('تقارير حضور وغياب الموظفين','staff-attendance','soft')}</div>`);
+  if(!Object.hasOwn(staffReports,kind))return showDialog('أدوات الطباعة والتقارير',`<div class="report-buttons">${Object.entries(staffReports).map(([key,[label]])=>btn(label,'staff-report',key,'outline-blue')).join('')}${btn('إفادة استمرارية العمل','staff-continuity','','outline-blue')}${link('تقارير حضور وغياب الموظفين','staff-attendance','soft')}</div>`);
   const f=filterData(route), staff=staffRows(f), [title,keys]=staffReports[kind];
   if(kind==='stats'){
     const jobs=new Map();
@@ -86,8 +90,29 @@ actions['staff-report']=kind=>{
     return schoolListReport(title,f.year,['الوظيفة','ذكور','إناث','غير محدد','المجموع'],[{rows}]);
   }
   const columns=keys.map(key=>STAFF_FIELDS.find(([name])=>name===key));
-  schoolListReport(title,f.year,['ر.م',...labelsFor(columns)],[{rows:staff.map((person,index)=>[index+1,...valuesFor(person,columns)])}],
+  const people=kind==='continuity'?staffContinuityRows(staff):staff;
+  schoolListReport(title,f.year,['ر.م',...labelsFor(columns)],[{rows:people.map((person,index)=>[index+1,...valuesFor(person,columns)])}],
     {orientation:keys.length>5?'أفقي':'عمودي',fontSize:11,rowsPerPage:24});
+};
+actions['staff-continuity']=()=>{
+  const people=staffContinuityRows(staffRows(filterData(route)));
+  if(!people.length)throw new Error('لا يوجد موظف بحالة عمل مستمرة ضمن الاختيارات.');
+  const choices=people.map(person=>[person.id,[person.name,person.education,person.job].filter(Boolean).join(' · ')]);
+  showDialog('إفادة استمرارية العمل',`<form class="stack" data-form="staff-continuity"><div class="fields tight">
+    ${field(['staff','الموظف',choices,true],people.length===1?people[0].id:'',{blank:'اختر الموظف'})}
+    ${field(['date','تاريخ الإفادة','date',true],dayISO())}
+    ${field(['recipient','الجهة الموجّه إليها','text'],'',{maxlength:160})}
+    ${field(['reference','رقم الإشارة','text'],'',{maxlength:50})}</div>${submit('معاينة الإفادة')}</form>`);
+};
+forms['staff-continuity']=data=>{
+  const staff=lookup('staff',data.staff);
+  if(!staffContinuityRows([staff]).length)throw new Error('حالة الموظف في السجل لا تدل على استمرارية العمل.');
+  const details=[['الاسم',staff.name],['الوظيفة',staff.job],['الحالة الوظيفية',staff.status],['السنة الدراسية',staff.year]];
+  if(staff.education)details.splice(1,0,['الرقم التعليمي',staff.education]);
+  if(staff.financial)details.splice(1,0,['الرقم المالي',staff.financial]);
+  if(staff.start)details.push(['تاريخ المباشرة المسجل',staff.start]);
+  continuityDocument('إفادة استمرارية العمل',staff.year,details,
+    'تفيد إدارة المدرسة بأن الموظف الواردة بياناته أدناه مستمر في العمل لديها حسب سجلاتها للعام الدراسي الموضح.',data);
 };
 actions['staff-card']=id=>{
   const s=lookup('staff',id);

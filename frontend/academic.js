@@ -189,7 +189,7 @@ function gradeReportChoices(source,plan) {
   const items=[...groups,['final','صحيفة النتيجة النهائية'],['review','تقرير المراجعة']];
   if(source==='add_kindergarten_grades'||source==='add_activity_grades')return items;
   if(source==='remedial_grades')return [['review','كشف مراجعة درجات الدور الثاني'],['final','صحيفة درجات الدور الثاني']];
-  return [...items,['double','صحيفة النتيجة النهائية (بطاقة بوجهين)'],['top','العشرة الأوائل'],['passed','كشف الناجحين'],['remedial','كشف الدور الثاني'],['weak','كشف المواد الضعيفة'],['needed','كشف احتياج النجاح'],['rate','نسبة النجاح العامة'],['subject-count','عدد طلبة الدور الثاني حسب المادة']];
+  return [...items,['periods','صحائف الفترات'],['double','صحيفة النتيجة النهائية (بطاقة بوجهين)'],['top','العشرة الأوائل'],['passed','كشف الناجحين'],['remedial','كشف الدور الثاني'],['weak','كشف المواد الضعيفة'],['needed','كشف احتياج النجاح'],['rate','نسبة النجاح العامة'],['subject-count','عدد طلبة الدور الثاني حسب المادة']];
 }
 forms['grade-report']=data=>actions['grades-report'](data.kind);
 actions['grades-report']=kind=>{

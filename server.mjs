@@ -563,7 +563,7 @@ function handleDataTransfer(req,data) {
   return writeState(root=>{
     const id=transferSession(req,root,data);
     const plan=transferPlan(root,id,data);
-    applyDataTransfer(root.schools[id],plan,newId);
+    applyDataTransfer(root.schools[id],plan,newId,data.validOnly===true);
     return {summary:plan.summary};
   },data.revision).value;
 }

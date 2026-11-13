@@ -94,3 +94,5 @@ dialog.report .modal-title { position:sticky; top:0; z-index:1; background:#fff 
 }
 .paper-seat-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px }
 .paper-seat-cards .school-paper-table { border:2px solid #000 }
+.paper-continuity-body { max-width: 160mm; margin: 8mm auto 0; line-height: 2 }
+.paper-continuity-body p { margin: 5mm 0 }

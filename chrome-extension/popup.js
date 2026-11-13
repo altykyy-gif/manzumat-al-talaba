@@ -84,18 +84,15 @@ async function sendTable(tablePacket) {
   message(tablePacket?'وصل الكشف إلى «'+result.school+'». راجع الأعمدة والصف ثم احفظه من داخل المنظومة.':'فُتحت صفحة نقل البيانات.');
 }
 function prepareExcelRows({headers,rows,kind,context}) {
-  if(kind==='students'){
-    const fields=[['year','السنة الدراسية',/السنة الدراسية|العام الدراسي/],['cls','الصف',/^الصف$|المستوى الدراسي|المرحلة الدراسية|الصف الدراسي/],
-      ['section','الفصل',/^الفصل$|الشعبة/],['stream','التخصص',/التخصص|المسار/]];
-    const extras=fields.filter(([key,,aliases])=>context?.[key]&&!headers.some(header=>aliases.test(header)));
-    return [[...headers,...extras.map(([,label])=>label)],...rows.map(row=>[...row,...extras.map(([key])=>context[key])])];
-  }
-  const numeric=headers.map(header=>/درجة|درجات|أعمال|امتحان|الفترة|المجموع|غياب|\bmark\b|\bscore\b/.test(header)&&!/رقم|معرف|\bid\b/i.test(header));
-  return [headers,...rows.map(row=>row.map((value,i)=>{
+  const fields=[['year','السنة الدراسية',/^(?:السنة الدراسية|العام الدراسي)$/],['cls','الصف',/^(?:الصف|المستوى الدراسي|المرحلة الدراسية|الصف الدراسي)$/],
+    ['section','الفصل',/^(?:الفصل|الشعبة|الشعبة الدراسية)$/],['stream','التخصص',/^(?:التخصص|المسار)$/]];
+  const extras=fields.filter(([key,,aliases])=>context?.[key]&&!headers.some(header=>aliases.test(header)));
+  const numeric=headers.map(header=>kind!=='students'&&/درجة|درجات|أعمال|امتحان|الفترة|المجموع|غياب|\bmark\b|\bscore\b/.test(header)&&!/رقم|معرف|\bid\b/i.test(header));
+  return [[...headers,...extras.map(([,label])=>label)],...rows.map(row=>[...row.map((value,i)=>{
     if(!numeric[i])return value;
     const digits=value.replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)%16)).replace(/[٫,]/g,'.');
     return /^\d+(?:\.\d+)?$/.test(digits)?Number(digits):value;
-  }))];
+  }),...extras.map(([key])=>context[key])])];
 }
 
 async function scanTables(){

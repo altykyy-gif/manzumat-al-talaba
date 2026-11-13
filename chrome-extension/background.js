@@ -15,7 +15,8 @@ async function scanPage(job,options,waiting=false) {
   if(!url||tab.status==='loading')return null;
   try {
     const [injection]=await chrome.scripting.executeScript({
-      target:{tabId:job.tabId},func:readTransferTables,args:[{...job.selection,paginate:true,...options}]
+      target:{tabId:job.tabId},world:options?.turn?'MAIN':'ISOLATED',func:readTransferTables,
+      args:[{...job.selection,paginate:true,...options}]
     });
     return injection?.result||null;
   }catch{
@@ -25,16 +26,19 @@ async function scanPage(job,options,waiting=false) {
 }
 
 async function turnPage(job,current,direction,expected) {
+  const navigation=crypto.randomUUID();
   const result=await scanPage(job,{
-    turn:direction,from:current.page.number,scope:current.scope,firstRow:JSON.stringify(current.table.rows[0])
+    turn:direction,from:current.page.number,scope:current.scope,firstRow:JSON.stringify(current.table.rows[0]),navigation
   });
+  if(result?.updating)throw new Error('يحدّث الموقع الكشف الآن. انتظر ظهور الجدول ثم أعد الالتقاط.');
   if(!result?.navigating)throw new Error(result?.error||'تعذّر الضغط على رابط الصفحة التالية.');
   const limit=Date.now()+20_000;
   const originalRows=JSON.stringify(current.table.rows);
-  for(let delay=90;Date.now()<limit;delay=Math.min(delay+60,450)){
+  for(let delay=75;Date.now()<limit;delay=Math.min(delay+50,400)){
     await new Promise(resolve=>setTimeout(resolve,delay));
     // The document can unload between reading the tab status and injecting the reader.
-    const page=await scanPage(job,undefined,true);
+    const page=await scanPage(job,{navigation},true);
+    if(page?.navigationError)throw new Error(page.error);
     if(!page?.table||!page.page.number||page.page.number===current.page.number)continue;
     if(page.page.number!==expected)throw new Error('انتقل الموقع إلى صفحة غير متوقعة.');
     if(JSON.stringify(page.table.rows)===originalRows)continue;

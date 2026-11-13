@@ -3,12 +3,13 @@ import {gradeRouteAccepts,setGradeMark,validatedGrade} from './policy.mjs';
 
 const TRANSFER_MAX_ROWS=5000, TRANSFER_MAX_COLUMNS=96;
 const transferText=value=>String(value??'').trim();
-const transferDigits=value=>transferText(value).replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)%16));
+const transferDigits=value=>transferText(value).replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'').trim().replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)%16));
 const transferKey=value=>transferDigits(value).normalize('NFKC').toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي')
   .replace(/ة/g,'ه').replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[^\p{L}\p{N}]+/gu,'');
-const transferReg=value=>transferDigits(value).toLowerCase();
+const transferReg=value=>transferDigits(transferText(value).normalize('NFKC')).toLowerCase();
+const transferNumericReg=value=>/^\d+$/.test(value)?value.replace(/^0+(?=\d)/,''):'';
 const transferNational=value=>{
-  const digits=transferDigits(value).replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'').trim();
+  const digits=transferDigits(value);
   return /^\d{12}$/.test(digits)?digits:'';
 };
 const transferScopedStream=cls=>['الثاني ثانوي','الثالث ثانوي'].includes(cls);
@@ -43,11 +44,28 @@ export function transferSourceScope(source) {
   return {year:YEARS.includes(year)?year:'',cls:CLASSES.includes(cls)?cls:'',section:SECTIONS.includes(section)?section:'',
     stream:transferScopedStream(cls)&&['علمي','أدبي'].includes(stream)?stream:''};
 }
-function transferWorkbookYear(table) {
-  const column=table.headers.findIndex(header=>['السنهالدراسيه','العامالدراسي'].includes(transferKey(header)));
-  if(column<0)return '';
-  const years=new Set(table.rows.map(row=>transferYear(row[column])).filter(Boolean));
-  return years.size===1?[...years][0]:'';
+function transferWorkbookScope(table) {
+  const keys=table.headers.map(transferKey);
+  const columns=[
+    ['year',['السنة الدراسية','العام الدراسي'],transferYear],
+    ['cls',transferAliases.cls,transferClass],
+    ['section',transferAliases.section,transferSection],
+    ['stream',transferAliases.stream,transferStream]
+  ];
+  return Object.fromEntries(columns.flatMap(([key,aliases,normalize])=>{
+    const indexes=aliases.map(transferKey);
+    const matches=keys.flatMap((header,index)=>indexes.includes(header)?[index]:[]);
+    if(matches.length!==1)return [];
+    const values=new Set(table.rows.map(row=>normalize(row[matches[0]])).filter(Boolean));
+    return values.size===1?[[key,[...values][0]]]:[];
+  }));
+}
+function transferWorkbookKind(headers) {
+  const keys=headers.map(transferKey);
+  if(keys.some(key=>/اعمال|امتحان|درجات|مجموعالفصلاول|مجموعالفصلالاول/.test(key)))return 'grades';
+  if(keys.some(key=>/غيابمشروع|غيابغيرمشروع|تقديراتالنشاط/.test(key)))return 'activities';
+  if(keys.some(key=>/^(?:الجنس|الجنسية|الجنسيه|اسمالام|تاريخالميلاد|اسمالوالده)$/.test(key)))return 'students';
+  return '';
 }
 const transferGender=value=>({
   ذكر:'ذكر',ذكور:'ذكر',طالب:'ذكر',ولد:'ذكر',male:'ذكر',m:'ذكر',
@@ -138,35 +156,60 @@ function transferScope(raw,withMap=false) {
   const stream=transferScopedStream(cls)?transferText(raw.stream):'';
   if(kind!=='students'&&transferScopedStream(cls)&&!['علمي','أدبي'].includes(stream))throw new Error('اختر التخصص.');
   if(stream&&!['علمي','أدبي'].includes(stream))throw new Error('التخصص غير صالح.');
-  return {kind,year,cls,section,stream,replace:raw.replace===true,...(withMap?{mapping:raw.mapping}:{}),
+  return {kind,year,cls,section,stream,replace:raw.replace===true,matchUnassigned:kind!=='students'&&Boolean(section)&&raw.matchUnassigned===true,
+    convertScale:kind==='grades'&&raw.convertScale===true,...(withMap?{mapping:raw.mapping}:{}),
     source:kind==='activities'?'add_activity_grades':routeForClass(cls)};
+}
+const transferGradeColumnKey=value=>transferKey(transferDigits(value)
+  .replace(/(^|\s)(?:درجة|درجات)\s+(?=(?:ال)?(?:أعمال|اختبار|امتحان))/g,'$1')
+  .replace(/(^|\s)ال(أعمال|أختبار|اختبار|امتحان)(?=\s|$)/g,'$1$2'));
+function transferGradeHeader(value) {
+  const text=transferDigits(value).normalize('NFKC');
+  const max=text.match(/\s*(?:[(/|]\s*(?:(?:من|الدرجة الكبرى|الدرجة العظمى|النهاية الكبرى|النهاية العظمى)\s*[:：]?\s*)?|(?:من|الدرجة الكبرى|الدرجة العظمى|النهاية الكبرى|النهاية العظمى)\s+)(\d+(?:[.,٫]\d+)?)\s*\)?\s*$/);
+  const name=max?text.slice(0,max.index).trim():text;
+  const total=/(?:مجموع|اجمالي|اجماليه|حصيله|محصله|total)/.test(transferKey(name));
+  const maximum=max?Number(max[1].replace(/[,٫]/g,'.')):null;
+  return {name,total,maximum:maximum>0?maximum:null};
 }
 export function transferFields(scope) {
   if(scope.kind==='students')return STUDENT_EXPORT.map(([key,label])=>({key,label,aliases:transferAliases[key]}));
+  const identity=['reg','national','name'].map(key=>({key,label:STUDENT_EXPORT.find(x=>x[0]===key)[1],aliases:transferAliases[key]}));
+  if(!CLASSES.includes(scope.cls))return identity;
   const plan=gradePlan(scope.kind==='activities'?'add_activity_grades':routeForClass(scope.cls),scope.cls,scope.stream);
   const alternateSubjects={
-    q:['القرآن'],i:['الإسلامية','التربية الدينية'],a:['العربية'],e:['الإنجليزية','اللغة الإنكليزية'],w:['الكتابة'],
+    q:['القرآن'],i:['الإسلامية','التربية الدينية'],a:['العربية','اللغة العربية (النحو والقراءة والنصوص)','النحو والقراءة والنصوص'],e:['الإنجليزية','اللغة الإنكليزية'],
+    w:['الكتابة','التعبير والإملاء والخط','اللغة العربية (الكتابة)'],
     m:['رياضيات'],b:['الأحياء'],p:['فيزياء'],k:['كيمياء'],ar:['الفنية'],mu:['الموسيقية'],sp:['البدنية']
   };
+  const terms=plan.components.map((component,index)=>{
+    const names=[component];
+    if(plan.components.length===4){
+      const term=index<2?'الأول':'الثاني', number=index<2?1:2;
+      const labels=index%2?['امتحان','اختبار','امتحان نهاية','اختبار نهاية']:['أعمال','أعمال سنة','أعمال السنة'];
+      for(const termName of ['الفصل '+term,'الفصل الدراسي '+term,'فصل '+term,'الفصل '+number,'الفصل الدراسي '+number])
+        for(const label of labels)names.push(label+' '+termName,termName+' '+label);
+    }else if(/فترة/.test(component)){
+      const ordinal=['الأولى','الثانية','الثالثة'][index];
+      names.push('الفترة '+ordinal,'فترة '+(index+1),'أعمال الفترة '+ordinal,'أعمال فترة '+(index+1));
+    }else if(scope.kind==='activities')names.push(index===0?'الفصل الدراسي الأول':'الفصل الدراسي الثاني');
+    return names;
+  });
   const marks=plan.items.flatMap(item=>plan.components.map((component,index)=>({
     key:item.key+'|'+index,label:item.label+' / '+component,item,index,
-    aliases:[item.label,...(alternateSubjects[item.key]||[])].flatMap(subject=>{
-      const ordinal=['الأولى','الثانية','الثالثة'][index];
-      const componentNames=[component];
-      if(plan.components.length===4){
-        const term=index<2?'الأول':'الثاني';
-        componentNames.push((index%2?'امتحان':'أعمال')+' الفصل '+term,(index%2?'امتحان':'أعمال')+' الفصل الدراسي '+term);
-      }else if(ordinal&&/فترة/.test(component))componentNames.push('الفترة '+ordinal,'فترة '+(index+1),'أعمال الفترة '+ordinal);
-      else if(scope.kind==='activities')componentNames.push(index===0?'الفصل الدراسي الأول':'الفصل الدراسي الثاني');
-      return componentNames.flatMap(label=>[subject+' / '+label,label+' / '+subject]);
-    })
+    aliases:[item.label,...(alternateSubjects[item.key]||[])].flatMap(subject=>terms[index].flatMap(label=>[subject+' / '+label,label+' / '+subject]))
   })));
-  return ['reg','national','name'].map(key=>({key,label:STUDENT_EXPORT.find(x=>x[0]===key)[1],aliases:transferAliases[key]})).concat(marks);
+  return identity.concat(marks);
 }
 export function transferSuggestedMapping(headers,fields) {
-  const keys=fields.map(field=>[field.key,new Set([field.label,...(field.aliases||[])].map(transferKey))]);
-  const matched=headers.map(label=>keys.filter(([,aliases])=>aliases.has(transferKey(label))));
-  return matched.map(list=>list.length===1&&matched.filter(row=>row.length===1&&row[0][0]===list[0][0]).length===1?list[0][0]:'');
+  const keys=fields.map(field=>[field,new Set([field.label,...(field.aliases||[])].map(field.item?transferGradeColumnKey:transferKey))]);
+  const matched=headers.map(label=>{
+    const {name,total}=transferGradeHeader(label);
+    const parts=name.split(/\s*[/|›»]\s*/).filter(Boolean);
+    const combinations=new Set(parts.map((part,i)=>transferGradeColumnKey([part,...parts.filter((_,index)=>i!==index)].join(' '))));
+    return keys.filter(([field,aliases])=>field.item?
+      !total&&[...combinations].some(key=>aliases.has(key)):aliases.has(transferKey(label))).map(([field])=>field.key);
+  });
+  return matched.map(list=>list.length===1&&matched.filter(row=>row.length===1&&row[0]===list[0]).length===1?list[0]:'');
 }
 function transferStudentRecord(values,prior,scope) {
   const limits={reg:45,name:180,mother:180,nation:100,gender:16,birth:30,cls:60,section:32,stream:30,phone:10};
@@ -188,18 +231,52 @@ function transferStudentRecord(values,prior,scope) {
   if(Object.entries(limits).some(([key,n])=>record[key].length>n))throw new Error('إحدى القيم أطول من الحد المسموح.');
   return {...record,year:scope.year};
 }
-function transferMatchingStudent(byReg,byNational,reg,national) {
-  const one=reg&&byReg.get(transferReg(reg)), two=national&&byNational.get(national);
+function transferMatchingStudent(byReg,byNational,reg,national,byNumericReg) {
+  const regKey=transferReg(reg), numeric=transferNumericReg(regKey);
+  const exact=reg&&byReg.get(regKey), one=exact??(numeric&&byNumericReg?.get(numeric)), two=national&&byNational.get(national);
+  if(one===false||two===false)throw new Error('المعرّف مكرر في سجلات السنة المحددة.');
   const storedNational=transferNational(one?.national);
   if(one&&two&&one.id!==two.id||storedNational&&national&&storedNational!==national)
     throw new Error('رقم القيد والرقم الوطني يشيران إلى سجلين مختلفين.');
   return one||two||null;
 }
-function transferGradeValue(raw,field) {
+function transferStudentIndex(students,field) {
+  const index=new Map();
+  for(const student of students){
+    const id=field(student);
+    if(id)index.set(id,index.has(id)?false:student);
+  }
+  return index;
+}
+function transferGradeStudent(student,scope,reg,national,otherYears) {
+  if(!student){
+    const numeric=transferNumericReg(transferReg(reg));
+    const years=[...new Set([...(otherYears.get('reg:'+transferReg(reg))||[]),...(otherYears.get('numeric:'+numeric)||[]),
+      ...(otherYears.get('national:'+national)||[])])].sort();
+    if(years.length)return {reason:'الطالب مسجّل في سنة دراسية أخرى.',detail:'السنة المطلوبة '+scope.year+' · السنوات المسجّلة '+years.join('، ')};
+    return {reason:'معرّف الطالب غير موجود في سجلات المدرسة.',detail:'استورد بيانات الطالب للسنة '+scope.year+' أولًا.'};
+  }
+  if(student.cls!==scope.cls||scope.stream&&student.stream!==scope.stream)
+    return {reason:'الصف أو التخصص في سجل الطالب يختلف عن الكشف.',detail:'السجل: '+[student.cls,student.stream].filter(Boolean).join(' · ')+' / الكشف: '+[scope.cls,scope.stream].filter(Boolean).join(' · ')};
+  if(!scope.section||student.section===scope.section)return null;
+  if(!student.section)return scope.matchUnassigned?null:{reason:'لم يُحدد فصل للطالب في سجل المدرسة.',detail:'عيّن فصل الطالب أو فعّل مطابقة الطلبة الذين لم يُحدد فصلهم.'};
+  return {reason:'الطالب مسجّل في فصل آخر.',detail:'السجل: '+student.section+' / الكشف: '+scope.section};
+}
+function transferGradeValue(raw,field,header,convertScale) {
   const text=transferDigits(raw);
-  const value=field.item.choices?field.item.choices.find(choice=>transferKey(choice)===transferKey(text))||text:
-    text.replace(/[٫,]/g,'.');
-  return validatedGrade(value,field.item,field.index);
+  if(field.item.choices)return {value:validatedGrade(field.item.choices.find(choice=>transferKey(choice)===transferKey(text))||text,field.item,field.index)};
+  if(header.total)throw new Error('عمود المجموع لا يطابق خانة رصد منفردة.');
+  const upper=field.item.max[field.index], normalized=text.replace(/[٫,]/g,'.');
+  const fraction=normalized.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+  const value=fraction?fraction[1]:normalized, maximum=fraction?Number(fraction[2]):header.maximum;
+  if(fraction&&header.maximum!==null&&maximum!==header.maximum)throw new Error('الدرجة الكبرى في الخلية تخالف عنوان العمود.');
+  if(maximum!==null&&maximum!==upper){
+    if(!convertScale)throw new Error('الدرجة الكبرى في المصدر '+maximum+'، وفي خانة الرصد '+upper+'.');
+    if(maximum<=0||!/^\d+(?:\.\d+)?$/.test(value)||Number(value)>maximum)
+      throw new Error('الدرجة خارج سلم المصدر من 0 إلى '+maximum+'.');
+    return {value:validatedGrade(String(Math.round(Number(value)/maximum*upper*10)/10),field.item,field.index),converted:maximum};
+  }
+  return {value:validatedGrade(value,field.item,field.index)};
 }
 export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set()) {
   const table=transferTable(rawTable), scope=transferScope(rawScope,true), fields=transferFields(scope);
@@ -211,13 +288,26 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
   if(new Set(chosen).size!==chosen.length)throw new Error('اربط كل حقل بعمود واحد فقط.');
   const studentsMode=scope.kind==='students';
   const gradeFields=chosen.filter(k=>byField.get(k).item);
+  const gradeHeaders=new Map(mapping.flatMap((key,i)=>byField.get(key)?.item?[[key,transferGradeHeader(table.headers[i])]]:[]));
   if(!chosen.includes('reg')&&!chosen.includes('national')||!studentsMode&&!gradeFields.length)
     throw new Error(studentsMode?'اربط عمود رقم القيد أو الرقم الوطني.':'اربط معرّف الطالب وعمودًا واحدًا للدرجات على الأقل.');
+  if(!studentsMode&&gradeFields.some(key=>gradeHeaders.get(key).total))throw new Error('ألغِ مطابقة أعمدة المجاميع مع خانات الرصد.');
   const roster=school.students.filter(row=>row.year===scope.year);
-  const byReg=new Map(roster.map(row=>[transferReg(row.reg),row]));
-  const byNational=new Map(roster.map(row=>[transferNational(row.national),row]).filter(([national])=>national));
+  const byReg=transferStudentIndex(roster,row=>transferReg(row.reg));
+  const byNational=transferStudentIndex(roster,row=>transferNational(row.national));
+  const byNumericReg=studentsMode?null:transferStudentIndex(roster,row=>transferNumericReg(transferReg(row.reg)));
+  const otherYears=new Map();
+  if(!studentsMode)for(const row of school.students){
+    if(row.year===scope.year)continue;
+    const reg=transferReg(row.reg), national=transferNational(row.national);
+    const numeric=transferNumericReg(reg);
+    for(const key of [reg&&'reg:'+reg,numeric&&'numeric:'+numeric,national&&'national:'+national].filter(Boolean)){
+      if(!otherYears.has(key))otherYears.set(key,new Set());
+      otherYears.get(key).add(row.year);
+    }
+  }
   const seen=new Set(), changes=[], entries=[];
-  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,missingGender:0,errors:0};
+  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,missingGender:0,converted:0,unassigned:0,errors:0};
   for(const [index,row] of table.rows.entries()){
     if(!row.some(Boolean))continue;
     const values=Object.fromEntries(mapping.flatMap((key,i)=>key?[[key,row[i]]]:[]));
@@ -227,9 +317,10 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
     const item={line:index+2,id:reg||national||'—',name:values.name||'',message:''};
     try{
       if(!reg&&!national)throw new Error('أدخل رقم القيد عند غياب رقم وطني كامل.');
-      const student=transferMatchingStudent(byReg,byNational,reg,national);
+      const student=transferMatchingStudent(byReg,byNational,reg,national,byNumericReg);
       if(student?.archive)throw new Error('الطالب في الأرشيف.');
-      if(!studentsMode&&student&&reg&&transferReg(student.reg)!==transferReg(reg))
+      const numeric=transferNumericReg(transferReg(reg));
+      if(!studentsMode&&student&&reg&&transferReg(student.reg)!==transferReg(reg)&&(!numeric||byNumericReg.get(numeric)?.id!==student.id))
         throw new Error('رقم القيد لا يطابق سجل صاحب الرقم الوطني.');
       const identities=[student&&'student:'+student.id,reg&&'reg:'+transferReg(reg),national&&'national:'+national].filter(Boolean);
       if(identities.some(id=>seen.has(id)))throw new Error('تكرر الطالب داخل الكشف.');
@@ -253,26 +344,41 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
           }
         }
       }else{
-        if(!student||student.cls!==scope.cls||scope.stream&&student.stream!==scope.stream||scope.section&&student.section!==scope.section)
-          throw new Error('لم يُعثر على الطالب ضمن الصف والفصل والسنة المحددة.');
-        const marks=[];
+        const mismatch=transferGradeStudent(student,scope,reg,national,otherYears);
+        if(mismatch){item.detail=mismatch.detail;throw new Error(mismatch.reason);}
+        const marks=[], issues=[];
         let preserved=0;
         for(const key of gradeFields){
           if(!values[key]||/^[—–-]$/.test(values[key]))continue;
-          const field=byField.get(key), value=transferGradeValue(values[key],field);
+          const field=byField.get(key), header=gradeHeaders.get(key);
+          let grade;
+          try{grade=transferGradeValue(values[key],field,header,scope.convertScale);}
+          catch(error){
+            issues.push({reason:field.label+' · '+error.message,detail:header.name.slice(0,100)+' = '+values[key].slice(0,50)});
+            continue;
+          }
           const before=school.grades[student.id]?.[scope.source+'|'+key]??'';
-          if(String(before)===String(value))continue;
+          if(String(before)===String(grade.value))continue;
           if(before!==''&&!scope.replace){preserved++;continue;}
-          marks.push({subject:field.item.key,index:field.index,value,before});
+          marks.push({subject:field.item.key,index:field.index,...grade,before});
+        }
+        if(issues.length){
+          item.reasons=issues.map(issue=>issue.reason);
+          item.detail=issues.slice(0,4).map(issue=>issue.reason+' ('+issue.detail+')').join('، ');
+          if(issues.length>4)item.detail+=' · '+(issues.length-4)+' مشكلات أخرى';
+          throw new Error('توجد درجات تحتاج مراجعة.');
         }
         counters.existingMarks+=preserved;
         if(marks.length){
           changes.push({id:student.id,source:scope.source,marks});
           counters.grades+=marks.length;
+          counters.converted+=marks.filter(mark=>mark.converted).length;
+          if(scope.section&&!student.section)counters.unassigned++;
           item.message=marks.length+' درجة للحفظ'+(preserved?' · '+preserved+' محفوظة سابقًا':'');
           item.detail=marks.map(mark=>{
             const field=byField.get(mark.subject+'|'+mark.index);
-            return field.label+' · '+(mark.before===''?'فارغ':mark.before)+' ← '+mark.value;
+            return field.label+' · '+(mark.before===''?'فارغ':mark.before)+' ← '+mark.value+
+              (mark.converted?' (من سلم '+mark.converted+' إلى '+field.item.max[mark.index]+')':'');
           }).join('، ');
         }else {counters.skipped++;item.message=preserved?'الدرجات محفوظة سابقًا':'لا تغييرات';}
       }
@@ -280,11 +386,14 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
     entries.push(item);
   }
   const errors=new Map();
-  for(const entry of entries)if(entry.error)errors.set(entry.message,(errors.get(entry.message)||0)+1);
-  return {changes,scope,summary:{total:entries.length,...counters,errorCounts:[...errors],examples:entries.slice(0,18),issues:entries.filter(row=>row.error).slice(0,30)}};
+  for(const entry of entries)if(entry.error)for(const reason of new Set(entry.reasons||[entry.message]))
+    errors.set(reason,(errors.get(reason)||0)+1);
+  const eligible=entries.filter(entry=>!entry.error).slice(0,18);
+  const issues=entries.filter(row=>row.error).slice(0,30).map(({reasons,...entry})=>entry);
+  return {changes,scope,summary:{total:entries.length,...counters,errorCounts:[...errors],examples:eligible,issues}};
 }
-export function applyDataTransfer(school,plan,createId) {
-  if(plan.summary.errors)throw new Error('صحّح صفوف الكشف المبينة في المعاينة قبل الحفظ.');
+export function applyDataTransfer(school,plan,createId,validOnly=false) {
+  if(plan.summary.errors&&(!validOnly||plan.scope.kind==='students'))throw new Error('راجع صفوف الكشف المبينة في المعاينة قبل الحفظ.');
   if(!plan.changes.length)throw new Error('لا توجد تغييرات للحفظ.');
   const students=new Map(school.students.map(row=>[row.id,row]));
   for(const change of plan.changes){
