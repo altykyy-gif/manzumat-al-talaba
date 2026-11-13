@@ -1,9 +1,9 @@
 // Runs in the extension's isolated world on the tab the user opened.
 export function readTransferTables(request={}) {
   const rootSelector='table,[role="table"],[role="grid"]';
-  const text=value=>String(value??'').replace(/[\u200e\u200f\u061c\u202a-\u202e]/g,'').replace(/\s+/g,' ').trim();
+  const text=value=>String(value??'').replace(/[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]/g,'').replace(/\s+/g,' ').trim();
   const visible=el=>el.getClientRects().length>0&&getComputedStyle(el).visibility==='visible';
-  const isSrs=/(^|\.)nec\.gov\.ly$/i.test(location.hostname)&&/^\/srs(?:\/|$)/i.test(location.pathname);
+  const isSrs=/(^|\.)(nec\.gov\.ly|edu-libya\.com)$/i.test(location.hostname)&&/^\/srs(?:\/|$)/i.test(location.pathname);
   const officialGrade=isSrs&&/\/SRSYPRData[^/]*\.aspx$/i.test(location.pathname);
   if(isSrs&&/\/UserLogin\.aspx$/i.test(location.pathname))return {tables:[]};
   const headerClues=/(?:رقم (?:القيد|التسجيل|الطالب)|(?:الرقم|رقم) الوطني|اسم (?:الطالب|التلميذ)|الجنسية|تاريخ الميلاد|أعمال|درج(?:ة|ات)|الصف|student|national|registration)/i;
@@ -18,6 +18,8 @@ export function readTransferTables(request={}) {
       (el.tagName!=='INPUT'||['text','number','tel'].includes(el.type)));
     if(editors.length===1){
       const editor=editors[0];
+      const masked=getComputedStyle(editor).webkitTextSecurity;
+      if(masked&&masked!=='none')return '';
       if(editor.tagName==='SELECT')return editor.value?text(editor.selectedOptions[0]?.textContent):'';
       return text(editor.value);
     }
@@ -26,6 +28,68 @@ export function readTransferTables(request={}) {
   };
   const rowCells=(root,row)=>[...row.children].filter(el=>el.matches('th,td,[role="cell"],[role="gridcell"],[role="columnheader"],[role="rowheader"]')&&
     el.closest(rootSelector)===root&&visible(el));
+  const digits=value=>text(value).replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)%16));
+  const pageNumber=value=>/^\d{1,5}$/.test(digits(value))?Number(digits(value))||null:null;
+  const pageControl='a[href],button,input[type="submit"],input[type="button"],[role="link"],[role="button"]';
+  const currentPage='[aria-current="page"],[aria-current="true"],.current,.active,.selected';
+  function pagination(root,elements) {
+    // GridView renders its numbers in a table nested in the last full-width row.
+    const footer=elements.at(-1), cells=footer?rowCells(root,footer):[];
+    const adjacent=root.nextElementSibling;
+    const containers=[root.tFoot,cells.length===1&&span(cells[0],'colspan','aria-colspan')>1&&cells[0],
+      adjacent?.matches('.pagination,.pager,[data-pagination]')&&adjacent].filter(Boolean);
+    for(const container of new Set(containers)){
+      const controls=[];
+      for(const control of container.querySelectorAll(pageControl)){
+        if(!visible(control)||container.contains(control.closest('[disabled],[aria-disabled="true"],.disabled'))||
+           container.contains(control.closest(currentPage)))continue;
+        if(control.hasAttribute('download')||control.target&&control.target!=='_self'||control.formTarget&&control.formTarget!=='_self')continue;
+        const href=control.getAttribute('href')||'', handler=control.getAttribute('onclick')||'';
+        const script=href+' '+handler;
+        const command=script.match(/['"]Page\$(\d{1,5}|First|Prev(?:ious)?|Next|Last)['"]/i)?.[1];
+        const postback=/\b(?:__doPostBack|WebForm_DoPostBackWithOptions)\s*\(/i.test(script);
+        if(/^javascript:/i.test(href)&&!postback)continue;
+        if(href&&!href.startsWith('#')&&!/^javascript:/i.test(href)){
+          let url;
+          try{url=new URL(href,location.href);}catch{continue;}
+          if(url.origin!==location.origin||url.pathname!==location.pathname||url.username||url.password)continue;
+        }
+        const label=text(control.innerText||control.value);
+        const hints=[label,control.title,control.getAttribute('aria-label'),control.rel].map(text);
+        const number=pageNumber(label)||pageNumber(command);
+        const direction=/^first$/i.test(command)||hints.some(hint=>/^(?:first|(?:الصفحة )?(?:الأولى|الاولى))$/i.test(hint))?'first':
+          /^prev(?:ious)?$/i.test(command)||hints.some(hint=>/^(?:prev(?:ious)?|السابق(?:ة)?|الصفحة السابقة)$/i.test(hint))?'previous':
+          /^next$/i.test(command)||hints.some(hint=>/^(?:next|التالي(?:ة)?|الصفحة التالية)$/i.test(hint))?'next':'';
+        if(number||direction)controls.push({control,number,direction,command});
+      }
+      if(!controls.length)continue;
+      const marked=[...container.querySelectorAll(currentPage)].filter(visible).map(el=>pageNumber(el.innerText)).filter(Boolean);
+      const staticNumbers=[...container.querySelectorAll('span,strong,b,td')]
+        .filter(el=>visible(el)&&!el.closest(pageControl)&&!el.querySelector(pageControl))
+        .map(el=>pageNumber(el.innerText)).filter(Boolean);
+      const candidates=new Set(marked.length?marked:staticNumbers);
+      const number=candidates.size===1?[...candidates][0]:null;
+      // Accept numeric controls only with a page marker, a GridView command, or a labelled pager.
+      if(!number&&!container.matches('.pagination,.pager,[data-pagination]')&&
+         !controls.some(({command})=>command))continue;
+      const forPage=n=>controls.find(item=>item.number===n)?.control;
+      const forDirection=direction=>controls.find(item=>item.direction===direction)?.control;
+      return {number,first:number===1?null:forPage(1)||forDirection('first'),
+        previous:number===1?null:(number&&forPage(number-1))||forDirection('previous'),
+        next:(number&&forPage(number+1))||forDirection('next')};
+    }
+    return null;
+  }
+  function recordTotal(root) {
+    let container=root.parentElement;
+    for(let level=0;container&&level<5;level++,container=container.parentElement){
+      const content=digits(container.innerText).slice(0,16000);
+      const matches=[...content.matchAll(/عدد\s+السجلات\s*[:：]?\s*(\d+(?:[,٬]\d{3})*)/g)];
+      const totals=new Set(matches.map(match=>Number(match[1].replace(/[,٬]/g,''))).filter(Number.isSafeInteger));
+      if(totals.size)return totals.size===1?[...totals][0]:null;
+    }
+    return null;
+  }
   const matrix=(rows)=>{
     const grid=[];
     for(let i=0;i<rows.length;i++){
@@ -46,8 +110,9 @@ export function readTransferTables(request={}) {
   const candidates=[];
   for(const [index,root] of [...document.querySelectorAll(rootSelector)].entries()){
     if(!visible(root)||root.querySelector('input[type="password"]'))continue;
-    const elements=(root.tagName==='TABLE'?[...root.rows]:[...root.querySelectorAll('[role="row"]')])
-      .filter(row=>row.closest(rootSelector)===root&&!row.closest('tfoot')&&visible(row));
+    const allRows=(root.tagName==='TABLE'?[...root.rows]:[...root.querySelectorAll('[role="row"]')])
+      .filter(row=>row.closest(rootSelector)===root&&visible(row));
+    const elements=allRows.filter(row=>row.parentElement!==root.tFoot);
     if(elements.length<2)continue;
     const cells=elements.map(row=>rowCells(root,row));
     if(!cells.some(row=>row.length>1))continue;
@@ -74,8 +139,12 @@ export function readTransferTables(request={}) {
     const hint=text(headingRows[0]?.map(cell=>cell.value).filter(Boolean).slice(0,5).join(' · ')).slice(0,110);
     const rowCount=cells.slice(headerCount).filter(row=>row.length>1||row[0]&&span(row[0],'colspan','aria-colspan')===1).length;
     if(!rowCount||width>96)continue;
-    const meta={index,width,rows:rowCount,kind,label:caption||hint||'جدول '+(index+1),score:(headerClues.test(labels)?8:0)+(headerCount?2:0)};
-    if(request.index===index){
+    const pager=pagination(root,allRows);
+    const total=isSrs||pager?recordTotal(root):null;
+    const meta={index,tableId:root.id,width,rows:rowCount,kind,label:caption||hint||'جدول '+(index+1),
+      score:(headerClues.test(labels)?8:0)+(headerCount?2:0),total,paginated:Boolean(pager||total>rowCount)};
+    const selected=request.tableId?root.id===request.tableId:request.index===index;
+    if(selected){
       if(rowCount>5000)return {error:'الجدول يتجاوز 5000 سجل. اختر فصلًا أصغر من الصفحة.'};
       try {
         const headerGrid=matrix(headingRows), dataGrid=matrix(cells.slice(headerCount).map(layout));
@@ -96,7 +165,20 @@ export function readTransferTables(request={}) {
           rows.push(row);
         }
         if(!rows.length)return {error:'الجدول لا يحتوي على بيانات ظاهرة.'};
-        return {meta,table:{headers:headerNames,rows}};
+        const page={number:pager?.number??null,first:Boolean(pager?.first),previous:Boolean(pager?.previous),next:Boolean(pager?.next)};
+        if(!request.paginate&&!request.turn)return {meta,table:{headers:headerNames,rows}};
+        const scope=JSON.stringify([...(root.closest('form')||document).querySelectorAll('select')]
+          .filter(el=>!root.contains(el)&&visible(el)).map(el=>[el.name||el.id,el.value]));
+        if(request.turn){
+          if(request.from!==page.number||request.scope!==scope||request.firstRow!==JSON.stringify(rows[0]))
+            return {error:'تغيّر الكشف قبل الانتقال إلى الصفحة التالية.'};
+          const control=['first','previous','next'].includes(request.turn)&&pager?.[request.turn];
+          if(!control)return {error:'لم يظهر رابط الانتقال المطلوب أسفل الكشف.'};
+          // Reply to the extension before a full form postback unloads this document.
+          setTimeout(()=>{if(control.isConnected)control.click();},40);
+          return {navigating:true};
+        }
+        return {meta,table:{headers:headerNames,rows},page,scope};
       }catch(error){return {error:error.message};}
     }
     candidates.push(meta);

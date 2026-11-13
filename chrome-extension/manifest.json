@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "أدوات منظومة الطلبة",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "تصدير بيانات الطلبة والدرجات من جداول SRS إلى Excel أو نقلها إلى منظومة الطلبة.",
   "minimum_chrome_version": "112",
   "permissions": ["activeTab", "scripting", "storage"],
+  "background": {"service_worker": "background.js", "type": "module"},
   "icons": {
     "16": "icon16.png",
     "32": "icon32.png",

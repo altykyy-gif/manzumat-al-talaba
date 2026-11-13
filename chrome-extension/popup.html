@@ -13,8 +13,8 @@
   </header>
   <main>
     <section id="source-panel" class="card">
-      <h2>جدول الصفحة الحالية</h2>
-      <p class="hint">افتح كشف الطلبة أو الدرجات في SRS، ثم اقرأ الجدول الظاهر.</p>
+      <h2>كشف الطلبة أو الدرجات</h2>
+      <p class="hint">افتح الكشف في SRS وحدّد المدرسة والصف، ثم اقرأ الجداول.</p>
       <button id="scan" class="primary full" type="button">قراءة الجداول</button>
       <div id="table-options" class="stack" hidden>
         <label for="table">الجدول</label>
@@ -25,8 +25,14 @@
           <option value="grades">الدرجات</option>
           <option value="activities">تقديرات النشاط والغياب</option>
         </select>
-        <button id="capture" class="primary full" type="button">التقاط الجدول</button>
+        <button id="capture-all" class="primary full" type="button" hidden>التقاط جميع الصفحات</button>
+        <button id="capture" class="secondary full" type="button">التقاط الصفحة الحالية</button>
       </div>
+    </section>
+    <section id="page-scan" class="card" hidden>
+      <h2>التقاط صفحات الكشف</h2>
+      <p id="page-scan-info" class="hint" role="status" aria-live="polite"></p>
+      <button id="stop-scan" class="subtle full" type="button">إيقاف الالتقاط</button>
     </section>
     <section id="destination-panel" class="card" hidden>
       <h2>التبويب الحالي</h2>

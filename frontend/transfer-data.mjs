@@ -7,6 +7,10 @@ const transferDigits=value=>transferText(value).replace(/[٠-٩۰-۹]/g,c=>Strin
 const transferKey=value=>transferDigits(value).normalize('NFKC').toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي')
   .replace(/ة/g,'ه').replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[^\p{L}\p{N}]+/gu,'');
 const transferReg=value=>transferDigits(value).toLowerCase();
+const transferNational=value=>{
+  const digits=transferDigits(value).replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'').trim();
+  return /^\d{12}$/.test(digits)?digits:'';
+};
 const transferScopedStream=cls=>['الثاني ثانوي','الثالث ثانوي'].includes(cls);
 const transferKinds=[['students','بيانات الطلبة'],['grades','درجات أعمال السنة والامتحان'],['activities','تقديرات النشاط والغياب']];
 const transferAliases={
@@ -150,10 +154,11 @@ export function transferSuggestedMapping(headers,fields) {
   return matched.map(list=>list.length===1&&matched.filter(row=>row.length===1&&row[0][0]===list[0][0]).length===1?list[0][0]:'');
 }
 function transferStudentRecord(values,prior,scope) {
-  const limits={reg:45,national:12,name:180,mother:180,nation:100,gender:16,birth:30,cls:60,section:32,stream:30,phone:10};
+  const limits={reg:45,name:180,mother:180,nation:100,gender:16,birth:30,cls:60,section:32,stream:30,phone:10};
   const record=Object.fromEntries(STUDENT_EXPORT.map(([key])=>[key,transferText(values[key]||prior?.[key]||
     (key==='cls'?scope.cls:key==='section'?scope.section:key==='stream'?scope.stream:''))]));
-  for(const key of ['reg','national','phone'])record[key]=transferDigits(record[key]);
+  for(const key of ['reg','phone'])record[key]=transferDigits(record[key]);
+  record.national=values.national||transferNational(prior?.national);
   record.cls=transferClass(record.cls);
   record.gender=transferGender(record.gender);
   record.section=transferSection(record.section);
@@ -161,7 +166,6 @@ function transferStudentRecord(values,prior,scope) {
   record.birth=transferBirth(record.birth);
   if(!record.reg||!record.name||!CLASSES.includes(record.cls)||!['ذكر','أنثى'].includes(record.gender))
     throw new Error('أكمل رقم القيد والاسم والصف والجنس.');
-  if(record.national&&!/^\d{12}$/.test(record.national))throw new Error('الرقم الوطني يجب أن يكون 12 رقمًا.');
   if(record.phone&&!/^09\d{8}$/.test(record.phone))throw new Error('هاتف ولي الأمر يجب أن يبدأ بـ09 ويتكون من 10 أرقام.');
   if(record.section&&!SECTIONS.includes(record.section))throw new Error('الفصل غير معروف. اختر رقمًا من 1 إلى 10.');
   if(transferScopedStream(record.cls)&&!['علمي','أدبي'].includes(record.stream))throw new Error('حدد التخصص العلمي أو الأدبي.');
@@ -170,7 +174,8 @@ function transferStudentRecord(values,prior,scope) {
 }
 function transferMatchingStudent(byReg,byNational,reg,national) {
   const one=reg&&byReg.get(transferReg(reg)), two=national&&byNational.get(national);
-  if(one&&two&&one.id!==two.id||one?.national&&national&&one.national!==national)
+  const storedNational=transferNational(one?.national);
+  if(one&&two&&one.id!==two.id||storedNational&&national&&storedNational!==national)
     throw new Error('رقم القيد والرقم الوطني يشيران إلى سجلين مختلفين.');
   return one||two||null;
 }
@@ -194,17 +199,18 @@ export function prepareDataTransfer(school,rawTable,rawScope,pendingIds=new Set(
     throw new Error(studentsMode?'اربط عمود رقم القيد أو الرقم الوطني.':'اربط معرّف الطالب وعمودًا واحدًا للدرجات على الأقل.');
   const roster=school.students.filter(row=>row.year===scope.year);
   const byReg=new Map(roster.map(row=>[transferReg(row.reg),row]));
-  const byNational=new Map(roster.filter(row=>row.national).map(row=>[row.national,row]));
+  const byNational=new Map(roster.map(row=>[transferNational(row.national),row]).filter(([national])=>national));
   const seen=new Set(), changes=[], entries=[];
-  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,errors:0};
+  const counters={added:0,updated:0,grades:0,skipped:0,existingMarks:0,ignoredNational:0,errors:0};
   for(const [index,row] of table.rows.entries()){
     if(!row.some(Boolean))continue;
     const values=Object.fromEntries(mapping.flatMap((key,i)=>key?[[key,row[i]]]:[]));
-    const reg=transferDigits(values.reg), national=transferDigits(values.national);
+    const reg=transferDigits(values.reg), national=transferNational(values.national);
+    if(values.national&&!national)counters.ignoredNational++;
+    values.national=national;
     const item={line:index+2,id:reg||national||'—',name:values.name||'',message:''};
     try{
-      if(!reg&&!national)throw new Error('رقم القيد والرقم الوطني فارغان.');
-      if(national&&!/^\d{12}$/.test(national))throw new Error('الرقم الوطني يجب أن يكون 12 رقمًا.');
+      if(!reg&&!national)throw new Error('أدخل رقم القيد عند غياب رقم وطني كامل.');
       const student=transferMatchingStudent(byReg,byNational,reg,national);
       if(student?.archive)throw new Error('الطالب في الأرشيف.');
       if(!studentsMode&&student&&reg&&transferReg(student.reg)!==transferReg(reg))

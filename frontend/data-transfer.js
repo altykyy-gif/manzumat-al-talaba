@@ -69,7 +69,8 @@ function transferReviewCard() {
     row.line,row.id,row.name,row.message+(row.detail?' · '+row.detail:'')
   ]),{className:'transfer-table'});
   const label=s.errors?'صحّح الصفوف المذكورة، ثم أعد المعاينة.':s.added+s.updated+s.grades?'راجع التغييرات ثم اضغط حفظ.':'لا توجد تغييرات للحفظ.';
-  return card(counts+notice(label,s.errors?'warn':'')+preview+
+  const nationalNote=s.ignoredNational?`<p class="muted small gap">تجاهل الاستيراد ${s.ignoredNational} من قيم الرقم الوطني المحجوبة أو غير المكتملة. تُستخدم أرقام القيد لمطابقة هذه السجلات.</p>`:'';
+  return card(counts+notice(label,s.errors?'warn':'')+nationalNote+preview+
     (rows.length<(s.errors?s.errors:s.total)?'<p class="muted small gap">يعرض الجدول أول '+rows.length+' سجل.</p>':'')+
     (!s.errors&&s.added+s.updated+s.grades?`<div class="btns gap">${btn('حفظ الاستيراد','transfer-apply','','green')}</div>`:''),'معاينة قبل الحفظ');
 }
