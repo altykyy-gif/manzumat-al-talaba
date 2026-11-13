@@ -4,5 +4,6 @@
 .transfer-table th,.transfer-table td { white-space:normal; min-width:100px }
 .transfer-table td:last-child { min-width:210px }
 .transfer-table select { width:100%; min-height:37px; border:1px solid #cbd5e1; border-radius:6px; padding:5px 9px; background:white }
+.transfer-table select + small { display:block; margin-top:3px }
 .transfer-counts { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px }
 .transfer-counts span { background:#edf3fb; color:#203b67; padding:6px 10px; border-radius:7px; font-size:14px }

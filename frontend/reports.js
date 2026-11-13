@@ -90,7 +90,7 @@ function gradeCardReport(view,title,summaries,indices,type) {
 function studentReportMenu(){return `<div class="grid2">${[
   ['طباعة بطاقات تعريف التلاميذ','id-cards'],['طباعة إفادة حسن السيرة','conduct'],['طباعة تعريف مدرسي','enrollment'],
   ['طباعة تعهد لتلميذ','pledge'],['طباعة بطاقة بيانات الطلبة','profiles']
-].map(([label,id])=>btn(label,'student-doc',id,'outline-blue')).join('')}${btn('طباعة إحصائية الطلبة','student-stats','','outline-blue')}${btn('طباعة كشف الأجانب فقط','student-print','foreign','outline-blue')}${link('طباعة كشف استلام الكتب','books-receipt','soft')}</div>`;}
+].map(([label,id])=>btn(label,'student-doc',id,'outline-blue')).join('')}${btn('إفادة استمرارية الدراسة','continuity-request','','outline-blue')}${btn('كشف استمرارية الدراسة','continuity-roster','','outline-blue')}${btn('طباعة إحصائية الطلبة','student-stats','','outline-blue')}${btn('طباعة كشف الأجانب فقط','student-print','foreign','outline-blue')}${link('طباعة كشف استلام الكتب','books-receipt','soft')}</div>`;}
 actions['student-report-menu']=()=>showDialog('أدوات الطباعة والتقارير',studentReportMenu());
 const STUDENT_DOCS={
   'id-cards':['بطاقة تعريف تلميذ',''],
@@ -109,6 +109,43 @@ actions['student-doc']=value=>{
     return paperFrame(title,student.year,body,{variant:'roster'});
   });
   showDocument(title,[],[],sections.join('')||paperFrame(title,filterData(route).year,notice('لا توجد سجلات مطابقة.')),'عمودي');
+};
+actions['continuity-request']=id=>{
+  const rows=id?[lookup('students',id)].filter(student=>!student.archive):studentRowsFor('all-student');
+  if(!rows.length)throw new Error('لا توجد سجلات نشطة ضمن الاختيارات.');
+  const options=rows.map(student=>[student.id,[student.name,student.reg,student.cls,student.section].filter(Boolean).join(' · ')]);
+  showDialog('إفادة استمرارية الدراسة',`<form class="stack" data-form="continuity-print"><div class="fields tight">
+    ${field(['student','الطالب',options,true],rows.length===1?rows[0].id:'',{blank:'اختر الطالب'})}
+    ${field(['date','تاريخ الإفادة','date',true],dayISO())}
+    ${field(['recipient','الجهة الموجّه إليها','text'],'',{maxlength:160})}
+    ${field(['reference','رقم الإشارة','text'],'',{maxlength:50})}</div>${submit('معاينة الإفادة')}</form>`);
+};
+forms['continuity-print']=data=>{
+  const student=lookup('students',data.student);
+  if(student.archive)throw new Error('الطالب في أرشيف المنتقلين.');
+  const details=[['اسم الطالب',student.name],['رقم القيد',student.reg],['الصف',student.cls],['الفصل',student.section||'—'],['السنة الدراسية',student.year]];
+  if(student.stream)details.splice(4,0,['التخصص',student.stream]);
+  continuityDocument('إفادة استمرارية الدراسة',student.year,details,
+    'تفيد إدارة المدرسة بأن الطالب الواردة بياناته أدناه مقيد بسجلاتها للعام الدراسي الموضح حتى تاريخ إصدار هذه الإفادة.',data);
+};
+function continuityDocument(title,year,details,statement,data) {
+  const date=String(data.date||'');
+  const time=Date.parse(date+'T00:00:00Z');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(time)||new Date(time).toISOString().slice(0,10)!==date)
+    throw new Error('أدخل تاريخ الإفادة.');
+  const recipient=cleanWorkflowText(data.recipient,160), reference=cleanWorkflowText(data.reference,50);
+  const meta=`<span>تاريخ الإفادة <bdi>${esc(date)}</bdi></span>${reference?'<span>رقم الإشارة <bdi>'+esc(reference)+'</bdi></span>':''}`;
+  const body=`<div class="paper-continuity-body">${recipient?'<p><strong>إلى</strong> '+esc(recipient)+'</p>':''}
+    <p>${esc(statement)}</p>
+    ${paperTable(['البيان','البيانات'],details,title)}
+    <p>أُعطيت له هذه الإفادة بناءً على طلبه.</p></div>`;
+  showDocument(title,[],[],paperFrame(title,year,body,{variant:'roster',meta}),'عمودي');
+}
+actions['continuity-roster']=()=>{
+  const year=filterData('all-student').year, title='كشف استمرارية الدراسة';
+  const rows=studentRowsFor('all-student').map((student,index)=>[index+1,student.reg,student.name,student.cls,student.section||'—',student.stream||'—']);
+  schoolListReport(title,year,['ر.م','رقم القيد','اسم الطالب','الصف','الفصل','التخصص'],[{rows,meta:'<span>عدد الطلبة <bdi>'+rows.length+'</bdi></span>'}],
+    {orientation:'أفقي',rowsPerPage:24});
 };
 const HALL_REPORTS=[
   ['room','طباعة كشف مناداة حسب القاعات'],['secret','كشف الأرقام السرية حسب الصفوف'],
