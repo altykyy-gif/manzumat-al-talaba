@@ -74,6 +74,7 @@ forms.register=async data=>{
   go('login');
 };
 function enterSchool(id,role='admin',userId='') {
+  resetTransferPage();
   activeSchoolId=id;
   session={role,userId};
   publicProof=null;publicMatches=[];publicPage='';teacherSession='';staffPortalRecord=null;staffPortalProof=null;canteenSession='';

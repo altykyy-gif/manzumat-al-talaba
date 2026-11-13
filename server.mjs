@@ -8,6 +8,7 @@ import { YEAR, YEARS, CLASSES, SECTIONS, SCHOOL_TYPES, REGIONS, routeForClass, g
 import { dayISO, emptySchool, gradeKey, makeDemo, migrateState, yearKey } from './model.mjs';
 import { PAGE_ACCESS, SHARED_DELEGATED, cleanWorkflowText, transferDraft, transferDecision, messageDraft, staffRequestDraft, staffRequestDecision, photoRequestDraft, photoRequestDecision, canteenSale, gradeRouteAccepts, setGradeMark } from './policy.mjs';
 import {applyTeacherAction,askHomework,homeworkAttachment,normalizeTeacherSettings,parentHomework,parentLessonAttendance,teacherGradeLock,teacherWorkspace,updateTeacherAccount} from './teacher-portal.mjs';
+import {applyDataTransfer,exportDataTransfer,prepareDataTransfer} from './frontend/transfer-data.mjs';
 
 const demo = process.argv.includes('--demo');
 const port = Number(process.env.AHMAD_PORT || 8080);
@@ -543,6 +544,29 @@ function workflow(req,request) {
   const renderedPage=typeof request.page==='string'&&request.page.length<80?request.page:page;
   return {state:snapshot(entry.root,entry.revision,entry.value,renderedPage)};
 }
+function transferSession(req,root,data) {
+  const session=adminSession(req,root);
+  if(!pageAllowed(root,session,'data-transfer'))fail(403,'نقل الكشوف متاح لإدارة المدرسة.');
+  if(data.school!==session.school)fail(409,'تغيّرت المدرسة المفتوحة. أعد المعاينة.');
+  return session.school;
+}
+function transferPlan(root,id,data) {
+  const pending=new Set(root.transfers.filter(row=>row.from===id&&row.status==='pending').map(row=>row.student));
+  return prepareDataTransfer(root.schools[id],data.table,data.scope,pending);
+}
+function handleDataTransfer(req,data) {
+  if(data.action==='preview'||data.action==='export'){
+    const {root,revision}=current(), id=transferSession(req,root,data);
+    return data.action==='export'?exportDataTransfer(root.schools[id],data.scope):{revision,summary:transferPlan(root,id,data).summary};
+  }
+  if(data.action!=='apply'||!Number.isSafeInteger(data.revision))fail(400,'أعد معاينة الكشف قبل الحفظ.');
+  return writeState(root=>{
+    const id=transferSession(req,root,data);
+    const plan=transferPlan(root,id,data);
+    applyDataTransfer(root.schools[id],plan,newId);
+    return {summary:plan.summary};
+  },data.revision).value;
+}
 function send(res,status,value,type='application/json; charset=utf-8') {
   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Permissions-Policy':'geolocation=(), microphone=(), camera=()'});
   res.end(type.startsWith('application/json')?JSON.stringify(value):value);
@@ -597,6 +621,7 @@ async function handle(req,res) {
       return send(res,201,{code:entry.value});
     }
     if(url.pathname==='/api/update')return send(res,200,stateUpdate(req,d));
+    if(url.pathname==='/api/data-transfer')return send(res,200,handleDataTransfer(req,d));
     if(url.pathname==='/api/vertical-mark')return send(res,200,verticalMark(req,d));
     if(url.pathname==='/api/workflow')return send(res,200,workflow(req,d));
     if(url.pathname==='/api/lookup'){

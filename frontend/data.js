@@ -9,7 +9,7 @@ const REGIONS = 'امساعد|البردي|طبرق|قصر الجدي|بئر ا�
 const NATIONALITIES = 'ليبيا|سوريا|فلسطيـن|مصر|الأردن|العراق|السـودان|المغرب|الجزائر|تونس|موريتانيا|لبنان|اليمن|اريتريا|تشاد|دول عربية|دول غير عربية|اثيوبيا|الصومال|المملكة العربية السعودية'.split('|');
 const MENU = [
   ['لوحة التحكم','◴','dashboard'], ['إضافة طالب','⊕','add-student'],
-  ['قائمة الطلاب','♟', [['all-student','جميع الطلاب'],['transferred-students','الطلبة المنتقلون الارشيف'],['inter-school-transfers','النقل عبر المدارس'],['books-receipt','إدارة كشف استلام الكتب']]],
+  ['قائمة الطلاب','♟', [['all-student','جميع الطلاب'],['transferred-students','الطلبة المنتقلون الارشيف'],['inter-school-transfers','النقل عبر المدارس'],['books-receipt','إدارة كشف استلام الكتب'],['data-transfer','نقل البيانات من SRS']]],
   ['الدرجات','◆', [['add_kindergarten_grades','تقييمات رياض الأطفال'],['add_grades','أعمال سنة – 1 إلى 5'],['add_activity_grades','رصد تقديرات مواد النشاط'],['student-grades-sse','أعمال سنة – النقل'],['remedial_grades','درجات الدور الثاني - النقل'],['record-exam-score','رصد برقم السري – النقل'],['student-grades-ninth','أعمال سنة - نظامي'],['student-grades-first-secondary','أعمال سنة – الأول ثانوي'],['student-grades-second-secondary','أعمال سنة – الثاني ثانوي'],['student-grades-third-secondary','أعمال سنة – الثالث ثانوي'],['student-grades-barcode','رصد الدرجات بالباركود'],['vertical-grades','الرصد العمودي للدرجات']]],
   ['الحضور والغياب','✓', [['attendance','تسجيل الحضور اليومي']]],
   ['الترحــــيل','↑', [['student-promotion','ترحيل الطلبة'],['students-cases','حالات الطلبة المسجلون وغير المسجلين']]],
@@ -108,4 +108,4 @@ function gradePlan(route, cls, stream) {
   return {components:names,items:Object.entries(totals).map(([key,total])=>({key,label:route==='student-grades-ninth'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],max:weights.map(weight=>Math.round(total*weight))}))};
 }
 const REMEDIAL_CLASSES=['الرابع','الخامس','السادس','السابع','الثامن','الأول ثانوي','الثاني ثانوي'];
-export {YEAR,YEARS,CLASSES,SECTIONS,DAYS,PERIODS,ATTENDANCE,SCHOOL_TYPES,REGIONS,REMEDIAL_CLASSES,routeForClass,gradePlan};
+export {YEAR,YEARS,CLASSES,SECTIONS,DAYS,PERIODS,ATTENDANCE,SCHOOL_TYPES,REGIONS,REMEDIAL_CLASSES,STUDENT_EXPORT,routeForClass,gradePlan};
