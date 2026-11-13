@@ -240,10 +240,12 @@ function validateGradeChange(grades,s) {
   for(const [id,marks] of Object.entries(grades)) {
     const student=students.get(id);
     if(!student||!keyedObject(marks))fail(400,'درجات مرتبطة بسجل غير موجود.');
+    const previous=s.grades[id]||{};
     for(const [key,value] of Object.entries(marks)) {
+      if(Object.hasOwn(previous,key)&&previous[key]===value)continue;
       const [source,subject,index,...rest]=key.split('|'), i=Number(index);
-      if(!validSources.has(source)||!gradeRouteAccepts(source,student.cls)||!/^[0-3]$/.test(index)||rest.length)fail(400,'خانة الرصد غير صالحة.');
-      const plan=gradePlan(source,student.cls,student.stream);
+      if(!validSources.has(source)||!gradeRouteAccepts(source,student.cls,student.year)||!/^[0-3]$/.test(index)||rest.length)fail(400,'خانة الرصد غير صالحة.');
+      const plan=gradePlan(source,student.cls,student.stream,student.year);
       const item=plan.items.find(x=>x.key===subject);
       if(!item||i>=plan.components.length||(item.choices?!item.choices.includes(value):typeof value!=='number'||!Number.isFinite(value)||value<0||value>item.max[i]))fail(400,'توجد درجة خارج المدى المحدد.');
     }
@@ -376,6 +378,7 @@ function stateUpdate(req,data) {
         }
         for(const row of value) {
           const old=previous.get(row.id);
+          if(old&&old.year!==row.year)fail(409,'استخدم الترحيل لإنشاء سجل في سنة دراسية أخرى.');
           if(old&&(old.cls!==row.cls||(old.stream||'')!==(row.stream||''))&&Object.keys(s.grades[row.id]||{}).length)fail(409,'السجل مرتبط بدرجات محفوظة في صفه الحالي.');
           if(old?.photo){row.photo=old.photo;row.photoApproved=old.photoApproved;}
           else {delete row.photo;delete row.photoApproved;}
