@@ -1,4 +1,4 @@
-import {CLASSES,REMEDIAL_CLASSES,routeForClass,gradePlan} from './data.js';
+import {CLASSES,YEAR,remedialClasses,routeForClass,gradePlan} from './data.js';
 import {gradeKey} from './model.mjs';
 
 export const PAGE_ACCESS = {
@@ -63,9 +63,9 @@ export function cleanWorkflowText(value,maximum,required=false) {
   if(clean.length>maximum||required&&!clean)throw new Error(required?'أكمل الحقول المطلوبة وتحقق من طولها.':'النص أطول من الحد المسموح.');
   return clean;
 }
-export function gradeRouteAccepts(source,cls) {
+export function gradeRouteAccepts(source,cls,year=YEAR) {
   if(source==='add_activity_grades')return CLASSES.indexOf(cls)>=2;
-  if(source==='remedial_grades')return REMEDIAL_CLASSES.includes(cls);
+  if(source==='remedial_grades')return remedialClasses(year).includes(cls);
   return routeForClass(cls)===source;
 }
 export function validatedGrade(value,item,index) {
@@ -80,8 +80,8 @@ export function validatedGrade(value,item,index) {
   return Math.round(mark*10)/10;
 }
 export function setGradeMark(s,student,source,subject,index,value) {
-  if(!student||student.archive||!gradeRouteAccepts(source,student.cls))throw new Error('السجل خارج كشف الدرجات المحدد.');
-  const plan=gradePlan(source,student.cls,student.stream);
+  if(!student||student.archive||!gradeRouteAccepts(source,student.cls,student.year))throw new Error('السجل خارج كشف الدرجات المحدد.');
+  const plan=gradePlan(source,student.cls,student.stream,student.year);
   const item=plan.items.find(row=>row.key===subject);
   if(!item||!Number.isInteger(index)||index<0||index>=plan.components.length)throw new Error('تعذر مطابقة المادة والفترة.');
   const mark=validatedGrade(value,item,index), key=gradeKey(source,subject,index);
@@ -202,20 +202,68 @@ export function canteenSale(s,reg,itemId,quantity,year,date,id) {
   s.wallet.push({id,student:student.id,item:itemId,quantity,date,label:item.name+' × '+quantity,amount:-cost});
   return {total:cost,balance:balance-cost};
 }
+const roundGrade=value=>Math.round(value*10)/10;
+const sumGrades=values=>roundGrade(values.reduce((total,value)=>total+Number(value),0));
+const hasGradeValue=value=>value!==undefined&&value!==null&&value!=='';
+const numericMarkInRange=(value,max)=>hasGradeValue(value)&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=max;
+function gradeDeficit(item,mark,final) {
+  return Math.max(0,roundGrade((item.minTotal??0)-mark),roundGrade((item.minFinal??0)-final));
+}
+function summarizeGradeSubjects(subjects) {
+  const complete=subjects.length>0&&subjects.every(item=>item.complete);
+  const numeric=subjects.filter(item=>item.complete&&typeof item.mark==='number');
+  const total=sumGrades(numeric.map(item=>item.mark)), max=sumGrades(numeric.map(item=>item.max));
+  return {
+    subjects,rows:subjects.map(({label,mark,max})=>[label,mark,max]),available:subjects.some(item=>item.recorded),
+    complete,total,max,percent:complete&&max?Math.round(total/max*10000)/100:null
+  };
+}
 export function gradeSummary(plan,source,marks,indices=null) {
-  let recorded=false, complete=true, total=0, max=0;
-  const rows=plan.items.map(item=>{
-    const indexes=indices??plan.components.map((_,i)=>i);
-    const values=indexes.map(i=>marks[source+'|'+item.key+'|'+i]);
-    if(values.some(v=>v!==undefined))recorded=true;
-    if(values.some(v=>v===undefined))complete=false;
-    if(item.choices)return [item.label,values.map(v=>v??'—').join(' / '),'—'];
-    const upper=indexes.reduce((sum,i)=>sum+item.max[i],0);
-    const grade=values.reduce((sum,v)=>sum+Number(v||0),0);
-    if(values.every(v=>v!==undefined)){total+=grade;max+=upper;}
-    return [item.label,values.every(v=>v!==undefined)?Math.round(grade*10)/10:'—',upper];
+  const indexes=indices??plan.components.map((_,i)=>i);
+  const subjects=plan.items.map(item=>{
+    const values=indexes.map(i=>marks[gradeKey(source,item.key,i)]);
+    const {key,label}=item, recorded=values.some(hasGradeValue);
+    if(item.choices){
+      const complete=values.every(value=>item.choices.includes(value));
+      return {key,label,recorded,complete,mark:values.map(value=>value??'—').join(' / '),max:'—'};
+    }
+    const complete=values.every((value,i)=>numericMarkInRange(value,item.max[indexes[i]]));
+    const max=sumGrades(indexes.map(i=>item.max[i])), mark=complete?sumGrades(values):'—';
+    const final=complete&&!indices?sumGrades((plan.rules?.finalIndexes||[]).map(i=>values[i])):0;
+    const need=complete&&!indices?gradeDeficit(item,mark,final):0;
+    return {key,label,recorded,complete,mark,max,need};
   });
-  return {rows,available:recorded,complete,total:Math.round(total*10)/10,max,percent:complete&&max?Math.round(total/max*10000)/100:null};
+  return summarizeGradeSubjects(subjects);
+}
+export function gradeRetakeSummary(plan,source,marks) {
+  const first=gradeSummary(plan,source,marks);
+  const exams=plan.rules.finalIndexes||[plan.components.length-1];
+  const works=plan.components.map((_,i)=>i).filter(i=>!exams.includes(i));
+  const subjects=plan.items.map((item,i)=>{
+    const earlier=first.subjects[i];
+    if(earlier.complete&&!earlier.need)return earlier;
+    const exam=marks[gradeKey('remedial_grades',item.key,0)];
+    const work=works.map(index=>marks[gradeKey(source,item.key,index)]);
+    const complete=numericMarkInRange(exam,item.secondRoundMax)&&work.every((value,j)=>numericMarkInRange(value,item.max[works[j]]));
+    const mark=complete?sumGrades([...work,exam]):'—';
+    return {key:item.key,label:item.label,recorded:earlier.recorded||hasGradeValue(exam),complete,mark,
+      max:item.totalMax,need:complete?gradeDeficit(item,mark,exam):0};
+  });
+  return summarizeGradeSubjects(subjects);
+}
+export function curriculumResult(result,rules,indices=null,retake=false) {
+  if(!result.complete||result.percent===null)return {status:'',weak:[]};
+  if(indices){
+    const weak=rules.minTotal===.40?result.subjects.flatMap(item=>{
+      const need=roundGrade(item.max*rules.minTotal-item.mark);
+      return need>0?[{...item,need}]:[];
+    }):[];
+    return {status:'',weak};
+  }
+  if(rules.autoPromote)return {status:'منقول',weak:[]};
+  const weak=result.subjects.filter(item=>item.need>0);
+  const status=!weak.length?'ناجح':retake||weak.length>(rules.maxSecondRoundSubjects??Infinity)?'راسب':'دور ثان';
+  return {status,weak};
 }
 export function classifyResult(result,rule) {
   if(!rule?.enabled||!result.complete||result.percent===null)return {status:'',weak:[]};

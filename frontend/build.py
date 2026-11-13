@@ -11,7 +11,7 @@ def embed_font(match):
 
 fonts = re.sub(r"url\(([\w.-]+\.(?:woff2|ttf))\)", embed_font, (assets / "fonts.css").read_text(encoding="utf-8"))
 css = fonts + "\n" + "\n".join((project / path).read_text(encoding="utf-8") for path in ("style.css", "admin.css", "paper.css", "teacher.css", "transfer.css"))
-scripts = ["data.js", "model.mjs", "policy.mjs", "teacher-portal.mjs", "transfer-data.mjs", "staff-import.mjs", "attendance-report.mjs", "workbook.js", "core.js", "shared.js", "logos.js", "paper.js", "students.js", "academic.js", "vertical.js", "planning.js", "operations.js", "workflows.js", "reports.js", "teacher.js", "data-transfer.js"]
+scripts = ["grading-rules.mjs", "data.js", "model.mjs", "policy.mjs", "teacher-portal.mjs", "transfer-data.mjs", "staff-import.mjs", "attendance-report.mjs", "workbook.js", "core.js", "shared.js", "logos.js", "paper.js", "students.js", "academic.js", "vertical.js", "planning.js", "operations.js", "workflows.js", "reports.js", "teacher.js", "data-transfer.js"]
 sources = [(project / path).read_text(encoding="utf-8") for path in scripts]
 js = "\n\n".join(re.sub(r"^import .*?\n|^export \{.*?\};\n|^export (?=const|function)", "", source, flags=re.M) for source in sources)
 

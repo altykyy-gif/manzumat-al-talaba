@@ -289,7 +289,7 @@ forms['exam-schedule']=async data=>{
     if(!days.length)throw new Error('حدد أيام دوام في إدارة الأيام الدراسية.');
     const rows=[];
     for(const cls of classes) {
-      const subjects=gradePlan(routeForClass(cls),cls,'علمي').items;
+      const subjects=gradePlan(routeForClass(cls),cls,'علمي',data.year).items;
       let date=data.start;
       for(const subject of subjects) {
         while(!days.includes(DAYS[new Date(date+'T12:00:00').getDay()])||holidays.has(date))date=shiftDate(date,1);

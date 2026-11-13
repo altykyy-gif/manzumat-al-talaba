@@ -152,7 +152,7 @@ function transferScope(raw,withMap=false) {
   if(!transferKinds.some(([key])=>key===kind)||!YEARS.includes(year))throw new Error('اختر نوع الكشف والسنة الدراسية.');
   if((kind!=='students'||cls)&&!CLASSES.includes(cls))throw new Error('اختر الصف الدراسي.');
   if(section&&!SECTIONS.includes(section))throw new Error('اختر الفصل من القائمة.');
-  if(kind==='activities'&&!gradeRouteAccepts('add_activity_grades',cls))throw new Error('اختر صفًا يدعم تقديرات النشاط.');
+  if(kind==='activities'&&!gradeRouteAccepts('add_activity_grades',cls,year))throw new Error('اختر صفًا يدعم تقديرات النشاط.');
   const stream=transferScopedStream(cls)?transferText(raw.stream):'';
   if(kind!=='students'&&transferScopedStream(cls)&&!['علمي','أدبي'].includes(stream))throw new Error('اختر التخصص.');
   if(stream&&!['علمي','أدبي'].includes(stream))throw new Error('التخصص غير صالح.');
@@ -175,11 +175,12 @@ export function transferFields(scope) {
   if(scope.kind==='students')return STUDENT_EXPORT.map(([key,label])=>({key,label,aliases:transferAliases[key]}));
   const identity=['reg','national','name'].map(key=>({key,label:STUDENT_EXPORT.find(x=>x[0]===key)[1],aliases:transferAliases[key]}));
   if(!CLASSES.includes(scope.cls))return identity;
-  const plan=gradePlan(scope.kind==='activities'?'add_activity_grades':routeForClass(scope.cls),scope.cls,scope.stream);
+  const plan=gradePlan(scope.kind==='activities'?'add_activity_grades':routeForClass(scope.cls),scope.cls,scope.stream,scope.year);
   const alternateSubjects={
-    q:['القرآن'],i:['الإسلامية','التربية الدينية'],a:['العربية','اللغة العربية (النحو والقراءة والنصوص)','النحو والقراءة والنصوص'],e:['الإنجليزية','اللغة الإنكليزية'],
+    q:['القرآن'],i:['الإسلامية','التربية الدينية'],a:['العربية','اللغة العربية','اللغة العربية (النحو والقراءة والنصوص)','النحو والقراءة والنصوص'],e:['الإنجليزية','اللغة الإنكليزية'],
     w:['الكتابة','التعبير والإملاء والخط','اللغة العربية (الكتابة)'],
-    m:['رياضيات'],b:['الأحياء'],p:['فيزياء'],k:['كيمياء'],ar:['الفنية'],mu:['الموسيقية'],sp:['البدنية']
+    g:['الاجتماعيات','المواد الاجتماعية'],u:['علم النفس','التربية وعلم النفس'],
+    m:['رياضيات'],b:['الأحياء'],p:['فيزياء','الفيزياء (الحرارية والميكانيكا)','الفيزياء (الكهرباء والميكانيكا)'],k:['كيمياء'],ar:['الفنية'],mu:['الموسيقية'],sp:['البدنية']
   };
   const terms=plan.components.map((component,index)=>{
     const names=[component];
@@ -188,6 +189,8 @@ export function transferFields(scope) {
       const labels=index%2?['امتحان','اختبار','امتحان نهاية','اختبار نهاية']:['أعمال','أعمال سنة','أعمال السنة'];
       for(const termName of ['الفصل '+term,'الفصل الدراسي '+term,'فصل '+term,'الفصل '+number,'الفصل الدراسي '+number])
         for(const label of labels)names.push(label+' '+termName,termName+' '+label);
+    }else if(plan.certificate&&index===2){
+      names.push('امتحان نهاية السنة','امتحان نهاية العام الدراسي','الامتحان النهائي','الامتحان الختامي','الفترة الثالثة','امتحان الفترة الثالثة');
     }else if(/فترة/.test(component)){
       const ordinal=['الأولى','الثانية','الثالثة'][index];
       names.push('الفترة '+ordinal,'فترة '+(index+1),'أعمال الفترة '+ordinal,'أعمال فترة '+(index+1));
@@ -408,6 +411,9 @@ export function exportDataTransfer(school,rawScope) {
   const rows=school.students.filter(student=>!student.archive&&student.year===scope.year&&(!scope.cls||student.cls===scope.cls)&&
     (!scope.section||student.section===scope.section)&&(!scope.stream||student.stream===scope.stream));
   rows.sort((a,b)=>CLASSES.indexOf(a.cls)-CLASSES.indexOf(b.cls)||a.name.localeCompare(b.name,'ar'));
-  return {headers:fields.map(field=>field.label),rows:rows.map(student=>fields.map(({key,item})=>
-    item?school.grades[student.id]?.[scope.source+'|'+key]??'':student[key]??''))};
+  const scopeFields=[['year','السنة الدراسية'],...(scope.kind==='students'?[]:[['cls','الصف'],['section','الفصل'],['stream','التخصص']])];
+  return {headers:[...fields.map(field=>field.label),...scopeFields.map(([,label])=>label)],rows:rows.map(student=>[
+    ...fields.map(({key,item})=>item?school.grades[student.id]?.[scope.source+'|'+key]??'':student[key]??''),
+    ...scopeFields.map(([key])=>student[key]??'')
+  ])};
 }

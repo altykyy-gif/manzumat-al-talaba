@@ -1,3 +1,5 @@
+import {curriculumFor,curriculumSubject,historicalArabicMax} from './grading-rules.mjs';
+
 const YEAR = '2026-2027';
 const YEARS = [YEAR, '2025-2026', '2024-2025', '2023-2024', '2022-2023', '2021-2022'];
 const CLASSES = ['الأول - رياض اطفال','الثاني - رياض اطفال','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن','التاسع','الأول ثانوي','الثاني ثانوي','الثالث ثانوي'];
@@ -10,7 +12,7 @@ const NATIONALITIES = 'ليبيا|سوريا|فلسطيـن|مصر|الأردن|
 const MENU = [
   ['لوحة التحكم','◴','dashboard'], ['إضافة طالب','⊕','add-student'],
   ['قائمة الطلاب','♟', [['all-student','جميع الطلاب'],['transferred-students','الطلبة المنتقلون الارشيف'],['inter-school-transfers','النقل عبر المدارس'],['books-receipt','إدارة كشف استلام الكتب'],['data-transfer','نقل البيانات من SRS']]],
-  ['الدرجات','◆', [['add_kindergarten_grades','تقييمات رياض الأطفال'],['add_grades','أعمال سنة – 1 إلى 5'],['add_activity_grades','رصد تقديرات مواد النشاط'],['student-grades-sse','أعمال سنة – النقل'],['remedial_grades','درجات الدور الثاني - النقل'],['record-exam-score','رصد برقم السري – النقل'],['student-grades-ninth','أعمال سنة - نظامي'],['student-grades-first-secondary','أعمال سنة – الأول ثانوي'],['student-grades-second-secondary','أعمال سنة – الثاني ثانوي'],['student-grades-third-secondary','أعمال سنة – الثالث ثانوي'],['student-grades-barcode','رصد الدرجات بالباركود'],['vertical-grades','الرصد العمودي للدرجات']]],
+  ['الدرجات','◆', [['add_kindergarten_grades','تقييمات رياض الأطفال'],['add_grades','أعمال سنة – 1 إلى 5'],['add_activity_grades','رصد تقديرات مواد النشاط'],['student-grades-sse','أعمال سنة – النقل'],['remedial_grades','درجات الدور الثاني'],['record-exam-score','رصد برقم السري – النقل'],['student-grades-ninth','أعمال سنة - نظامي'],['student-grades-first-secondary','أعمال سنة – الأول ثانوي'],['student-grades-second-secondary','أعمال سنة – الثاني ثانوي'],['student-grades-third-secondary','أعمال سنة – الثالث ثانوي'],['student-grades-barcode','رصد الدرجات بالباركود'],['vertical-grades','الرصد العمودي للدرجات']]],
   ['الحضور والغياب','✓', [['attendance','تسجيل الحضور اليومي']]],
   ['الترحــــيل','↑', [['student-promotion','ترحيل الطلبة'],['students-cases','حالات الطلبة المسجلون وغير المسجلين']]],
   ['إدارة الامتحانات','▤', [['students-hall','أرقام الجلوس'],['exam-questions','إنشاء أسئلة الامتحانات'],['exam-schedule','جدول الامتحانات'],['exam-observers','توزيع الملاحظين على القاعات']]],
@@ -80,7 +82,7 @@ function routeForClass(cls) {
   if (CLASSES.slice(7,10).includes(cls)) return 'student-grades-sse';
   return ['student-grades-ninth','student-grades-first-secondary','student-grades-second-secondary','student-grades-third-secondary'][CLASSES.indexOf(cls)-10];
 }
-function gradePlan(route, cls, stream) {
+function gradePlan(route, cls, stream, year=YEAR) {
   if (route === 'vertical-grades') route = routeForClass(cls);
   let names, weights, totals;
   if (route === 'add_kindergarten_grades') {
@@ -89,6 +91,22 @@ function gradePlan(route, cls, stream) {
   if (route === 'add_activity_grades') {
     const choices = ['مقبول','جيد','جيد جداً','ممتاز'];
     return {components:CLASSES.indexOf(cls)<7?['الفترة 1','الفترة 2','الفترة 3']:['الفصل الأول','الفصل الثاني'], items:['ar','mu','sp','ex','un'].map((key,i)=>({key,label:SUBJECTS[key],choices:i<3?choices:null,max:[180,180,180]}))};
+  }
+  const curriculum=curriculumFor(year,cls,stream);
+  if(curriculum&&(route===routeForClass(cls)||route==='remedial_grades')){
+    const {rules,subjects}=curriculum;
+    const certificate=rules.finalIndexes?.length===1;
+    const components=certificate?['أعمال - فترة 1','أعمال - فترة 2','امتحان نهاية العام']:
+      rules.finalIndexes?SEMESTERS:['أعمال فترة أولى - فترة 1','أعمال فترة ثانية - فترة 2','أعمال فترة ثالثة - فترة 3'];
+    const items=Object.entries(subjects).map(([key,weekly])=>({
+      key,label:key==='u'?'علم النفس':cls==='التاسع'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],
+      ...curriculumSubject(key,weekly,rules,cls)
+    }));
+    if(route==='remedial_grades')return {
+      components:['امتحان الدور الثاني'],items:items.filter(item=>item.secondRoundMax!==null).map(item=>({...item,max:[item.secondRoundMax]})),
+      rules,certificate
+    };
+    return {components,items,rules,certificate};
   }
   if (route === 'add_grades') {
     names = ['أعمال فترة أولى - فترة 1','أعمال فترة ثانية - فترة 2','أعمال فترة ثالثة - فترة 3'];
@@ -105,7 +123,15 @@ function gradePlan(route, cls, stream) {
     names = SEMESTERS; weights = [.2,.3,.2,.3];
     totals = route==='student-grades-first-secondary'?FIRST_SECONDARY:route==='student-grades-second-secondary'?(stream==='أدبي'?SECOND_ARTS:SECOND_SCIENCE):cls==='السادس'?SIXTH:UPPER_TRANSPORT;
   }
-  return {components:names,items:Object.entries(totals).map(([key,total])=>({key,label:route==='student-grades-ninth'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],max:weights.map(weight=>Math.round(total*weight))}))};
+  const arabic=historicalArabicMax(year,cls,route);
+  return {components:names,items:Object.entries(totals).map(([key,total])=>({
+    key,label:route==='student-grades-ninth'&&key==='a'?'النحو والقراءة والنصوص':SUBJECTS[key],
+    max:key==='a'&&arabic?arabic:weights.map(weight=>Math.round(total*weight))
+  }))};
 }
 const REMEDIAL_CLASSES=['الرابع','الخامس','السادس','السابع','الثامن','الأول ثانوي','الثاني ثانوي'];
-export {YEAR,YEARS,CLASSES,SECTIONS,DAYS,PERIODS,ATTENDANCE,SCHOOL_TYPES,REGIONS,REMEDIAL_CLASSES,STUDENT_EXPORT,STAFF_FIELDS,routeForClass,gradePlan};
+const remedialClasses=year=>CLASSES.slice(2).filter(cls=>{
+  const curriculum=curriculumFor(year,cls);
+  return curriculum?!curriculum.rules.autoPromote:REMEDIAL_CLASSES.includes(cls);
+});
+export {YEAR,YEARS,CLASSES,SECTIONS,DAYS,PERIODS,ATTENDANCE,SCHOOL_TYPES,REGIONS,REMEDIAL_CLASSES,remedialClasses,STUDENT_EXPORT,STAFF_FIELDS,routeForClass,gradePlan};

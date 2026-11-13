@@ -18,7 +18,7 @@ function verticalView() {
   const page='vertical-grades';
   const f=filterData(page,{cls:'الأول',stream:'علمي',subject:'',type:'',limit:'10',sort:'section_name'});
   const source=routeForClass(f.cls), stream=['الثاني ثانوي','الثالث ثانوي'].includes(f.cls)?f.stream||'علمي':'';
-  const plan=gradePlan(source,f.cls,stream), types=verticalTypes(source,plan);
+  const plan=gradePlan(source,f.cls,stream,f.year), types=verticalTypes(source,plan);
   const type=types.find(([key])=>key===f.type)||types[0], item=plan.items.find(x=>x.key===f.subject);
   const rows=item?activeStudents(f.year).filter(x=>x.cls===f.cls&&(!stream||x.stream===stream)&&finds(x.name,f.q)):[];
   const compare=(a,b)=>{
@@ -117,7 +117,7 @@ function queueVerticalSave(el) {
   if(prior?.value===value||!prior&&value===saved)return;
   const [source,subject,indexText]=key.split('|'), index=Number(indexText);
   const snapshot=school().students.find(row=>row.id===student);
-  const item=snapshot&&gradePlan(source,snapshot.cls,snapshot.stream).items.find(row=>row.key===subject);
+  const item=snapshot&&gradePlan(source,snapshot.cls,snapshot.stream,snapshot.year).items.find(row=>row.key===subject);
   if(!item)return;
   try{validatedGrade(value,item,index);}
   catch(error){el.setAttribute('aria-invalid','true');el.dataset.saveState='error';flash(error.message,'error');return;}

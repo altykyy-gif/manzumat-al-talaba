@@ -1,9 +1,29 @@
-const supportsResultRules=source=>['add_grades','student-grades-sse','student-grades-first-secondary','student-grades-second-secondary'].includes(source);
+const supportsResultRules=(source,plan)=>plan.rules||['add_grades','student-grades-sse','student-grades-first-secondary','student-grades-second-secondary'].includes(source);
 actions['grading-settings']=()=>{
-  const {f,source}=gradeView();
-  if(!supportsResultRules(source))throw new Error('هذه الشاشة تعرض الرصد دون احتساب نتيجة نهائية.');
+  const {f,source,plan}=gradeView();
+  if(!supportsResultRules(source,plan))throw new Error('اختر كشفًا يتضمن قواعد النجاح.');
+  const heading=`<p>${esc(f.cls)}${f.stream?' · '+esc(f.stream):''} · <bdi>${esc(f.year)}</bdi></p>`;
+  if(plan.rules){
+    const {rules}=plan, sample=plan.items[0];
+    const finalLabel=plan.certificate?'امتحان نهاية العام':'مجموع امتحاني الفصلين';
+    const guidance=rules.autoPromote?'النتيجة الدراسية منقول بعد اكتمال التقييم. تعتمد الإدارة حالات الإعادة والاستثناء.':
+      `يشترط ${rules.minTotal*100}% من الدرجة الكبرى لكل مادة${sample.minFinal===null?'':' و'+rules.minFinal*100+'% من '+finalLabel}.`;
+    const threshold=[...(sample.minFinal!==null?['أدنى '+finalLabel]:[]),...(sample.minTotal!==null?['أدنى المجموع']:[])];
+    const rows=plan.items.map(item=>[item.label,item.weeklyPeriods,...item.max,item.totalMax,
+      ...(item.minFinal!==null?[item.minFinal]:[]),...(item.minTotal!==null?[item.minTotal]:[]),
+      ...(rules.autoPromote?[]:[item.secondRoundMax])]);
+    const columns=['المادة','الحصص أسبوعيًا',...plan.components,'الدرجة الكبرى',...threshold,...(rules.autoPromote?[]:['امتحان الدور الثاني'])];
+    const details=plan.items.flatMap(item=>{
+      const work=item.workBreakdown;
+      if(f.cls==='السادس'&&item.key==='s'&&work)return [`علوم السادس في كل فصل: الأنشطة ${work.activities}، التطبيقات ${work.quizzes}، وامتحان منتصف الفصل ${work.midterm}. مجموع الأعمال ${item.max[0]}.`];
+      return item.parts?[`توزيع درجة ${item.label}: ${item.parts.map(part=>part.label+' '+part.max).join('، ')}.`]:[];
+    });
+    const parts=details.map(note=>'<p class="muted small">'+esc(note)+'</p>').join('');
+    const retake=rules.maxSecondRoundSubjects?`<p class="muted small">الدور الثاني للراسبين في ثلاث مواد على الأكثر وفق الدرجات.</p>`:'';
+    return showDialog('قواعد الدرجات والنجاح',`<div class="stack">${heading}<p>${esc(guidance)}</p>${table(columns,rows,{name:'حدود الدرجات والنجاح'})}${parts}${retake}<p class="muted small">يحسب التقرير نتيجة الدرجات المكتملة. تعتمد المدرسة المواظبة والأعذار وحالات الاستثناء.</p></div>`,'report');
+  }
   const key=yearKey(f.year,f.cls,f.stream), rule=school().gradingRules[key]||{overall:50,subject:50,remedial:2};
-  showDialog('إعداد قواعد النجاح',`<p>${esc(f.cls)} · <bdi>${esc(f.year)}</bdi></p><p class="muted small">تُستخدم القيم التي تعتمدها المدرسة لهذا الصف في التقارير. السجل الناقص لا يدخل في احتساب الحالة.</p><form data-form="grading-rules" data-key="${esc(key)}" class="stack">
+  showDialog('إعداد قواعد النجاح',heading+`<p class="muted small">تُستخدم القيم التي تعتمدها المدرسة لهذا الصف في التقارير. السجل الناقص لا يدخل في احتساب الحالة.</p><form data-form="grading-rules" data-key="${esc(key)}" class="stack">
     ${field(['enabled','تفعيل الاحتساب الآلي للحالة','checkbox'],rule.enabled)}${field(['overall','الحد الأدنى للمعدل العام (%)','number',true],rule.overall,{min:0,max:100,step:.1})}${field(['subject','الحد الأدنى لكل مادة (%)','number',true],rule.subject,{min:0,max:100,step:.1})}${field(['remedial','أقصى عدد مواد للدور الثاني','number',true],rule.remedial,{min:0,max:20})}${submit('حفظ القواعد')}</form>`);
 };
 forms['grading-rules']=async(data,form)=>{
@@ -15,7 +35,7 @@ forms['grading-rules']=async(data,form)=>{
 function outcomeReport(kind,title,year,summaries) {
   if(kind==='rate'){
     const counted=summaries.filter(x=>x.complete&&x.status);
-    const rows=['ناجح','دور ثان','راسب'].map(status=>{
+    const rows=[...(counted.some(x=>x.status==='منقول')?['منقول']:[]),'ناجح','دور ثان','راسب'].map(status=>{
       const n=counted.filter(x=>x.status===status).length;
       return [status,n,counted.length?(100*n/counted.length).toFixed(2)+'%':'—'];
     });
@@ -35,7 +55,8 @@ function gradePaperPeriods(view,indices) {
   const labels=primary?['الفترة الأولى (30%)','الفترة الثانية (30%)','الفترة الثالثة (40%)']:view.plan.components;
   if(indices)return [{label:primary?labels[indices[0]].split(' (')[0]:indices.length===1?labels[indices[0]]:indices[0]===0?'الفصل الأول':'الفصل الثاني',indices}];
   const groups=primary||labels.length!==4?labels.map((label,i)=>({label,indices:[i]})):[{label:'الفصل الأول',indices:[0,1]},{label:'الفصل الثاني',indices:[2,3]}];
-  return [...groups,{label:'النتيجة النهائية (100%)',indices:null}];
+  const worksOnly=['student-grades-ninth','student-grades-third-secondary'].includes(view.source)&&!view.plan.certificate;
+  return [...groups,{label:worksOnly?'مجموع أعمال السنة':'النتيجة النهائية (100%)',indices:null}];
 }
 function gradePaperMarks(view,student,groups) {
   const marks=(view.school||school()).grades[student.id]||{};
@@ -47,7 +68,7 @@ function gradePaperMarks(view,student,groups) {
   return `<table class="school-paper-table grade-marks" aria-label="درجات التلميذ"><colgroup><col>${'<col>'.repeat(groups.length*2)}</colgroup><thead>${header}</thead><tbody>${rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value)+'</td>').join('')+'</tr>').join('')}</tbody></table>`;
 }
 function gradePaperActivity(view,student,groups) {
-  const activity=gradePlan('add_activity_grades',student.cls,student.stream);
+  const activity=gradePlan('add_activity_grades',student.cls,student.stream,student.year);
   const grades=(view.school||school()).grades[student.id]||{};
   const periodGroups=groups.filter(group=>group.indices);
   const rows=activity.items.filter(item=>item.choices).map(item=>[item.label,...periodGroups.map(group=>{
