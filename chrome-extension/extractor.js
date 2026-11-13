@@ -9,7 +9,14 @@ export function readTransferTables(request={}) {
   const navigationState='data-talaba-page-request';
   const navigation=request.navigation&&document.documentElement.getAttribute(navigationState);
   if(navigation===request.navigation+':pending')return {updating:true};
+  if(navigation===request.navigation+':not-started')return {notStarted:true};
+  if(navigation===request.navigation+':timeout')return {navigationTimeout:true};
   if(navigation===request.navigation+':failed')return {navigationError:true,error:'أبلغ الموقع عن تعذّر تحميل صفحة الكشف.'};
+  let manager;
+  if(request.turn){
+    try{manager=globalThis.Sys?.WebForms?.PageRequestManager?.getInstance();}catch{}
+    if(manager?.get_isInAsyncPostBack?.())return {updating:true};
+  }
   const headerClues=/(?:رقم (?:القيد|التسجيل|الطالب)|(?:الرقم|رقم) الوطني|اسم (?:الطالب|التلميذ)|الجنسية|تاريخ الميلاد|أعمال|درج(?:ة|ات)|الصف|student|national|registration)/i;
   const headingCell=cell=>cell.tagName==='TH'||cell.getAttribute('role')==='columnheader';
   const span=(cell,attr,aria)=>{
@@ -102,34 +109,34 @@ export function readTransferTables(request={}) {
   function clickPage(control) {
     const token=request.navigation;
     const documentRoot=document.documentElement;
-    let manager;
-    try{manager=globalThis.Sys?.WebForms?.PageRequestManager?.getInstance();}catch{}
-    if(manager?.get_isInAsyncPostBack?.())return {updating:true};
     // A synchronous postback may unload this document. Return before clicking, and
     // subscribe before the click so even a fast UpdatePanel response is observed.
     if(token)documentRoot.setAttribute(navigationState,token+':pending');
     setTimeout(()=>{
-      if(!control.isConnected)return;
       let timer, started=false, finished=false;
       const state=value=>{if(token)documentRoot.setAttribute(navigationState,token+':'+value);};
+      if(!control.isConnected||manager?.get_isInAsyncPostBack?.()){
+        state('not-started');
+        return;
+      }
       const begin=()=>{started=true;state('pending');};
-      const finish=failed=>{
+      const finish=value=>{
         if(finished)return;
         finished=true;
         clearTimeout(timer);
         manager?.remove_beginRequest?.(begin);
         manager?.remove_endRequest?.(end);
-        state(failed?'failed':'complete');
+        if(token&&documentRoot.getAttribute(navigationState)===token+':pending')state(value);
       };
-      const end=(_sender,args)=>finish(Boolean(args?.get_error?.()));
+      const end=(_sender,args)=>finish(args?.get_error?.()?'failed':'complete');
       manager?.add_beginRequest?.(begin);
       manager?.add_endRequest?.(end);
-      timer=setTimeout(()=>finish(true),20_000);
+      timer=setTimeout(()=>finish('timeout'),request.waitMs??20_000);
       try{
         control.click();
-        if(!started&&!manager?.get_isInAsyncPostBack?.())finish(false);
+        if(!started&&!manager?.get_isInAsyncPostBack?.())finish('complete');
         else if(!finished)state('pending');
-      }catch{finish(true);}
+      }catch{finish('failed');}
     },35);
     return {navigating:true};
   }
@@ -138,32 +145,51 @@ export function readTransferTables(request={}) {
       .map(match=>Number(match[1].replace(/[,٬]/g,''))).filter(Number.isSafeInteger);
     let container=root.parentElement;
     for(let level=0;container&&level<5;level++,container=container.parentElement){
-      const totals=new Set(findTotal((container.innerText||'').slice(0,16000)));
+      const totals=new Set();
       for(const label of container.querySelectorAll('label,span,td,th')){
         if(root.contains(label)||label.children.length||!visible(label)||!/^عددالسجلات$/.test(key(label.innerText)))continue;
-        const siblings=[label.nextElementSibling,label.previousElementSibling].filter(Boolean);
+        const cell=label.closest('td,th');
+        const siblings=[label.nextElementSibling,cell?.nextElementSibling,label.previousElementSibling,cell?.previousElementSibling]
+          .filter(el=>el&&visible(el));
         const neighbor=siblings.map(el=>digits(el.innerText)).find(value=>/^\d+(?:[,٬]\d{3})*$/.test(value));
         if(neighbor)totals.add(Number(neighbor.replace(/[,٬]/g,'')));
       }
+      if(!totals.size)for(const total of findTotal((container.innerText||'').slice(0,16000)))totals.add(total);
       if(totals.size)return totals.size===1?[...totals][0]:null;
     }
     return null;
   }
-  function reportFilters(root) {
-    return [...(root.closest('form')||document).querySelectorAll('select')].filter(el=>!root.contains(el)&&visible(el));
+  function reportFilters(root,gradeReport) {
+    const form=root.closest('form')||document;
+    const controls=[...form.querySelectorAll(gradeReport?'select[name],input[name]':'select')]
+      .filter(el=>!root.contains(el));
+    if(!gradeReport)return controls.filter(visible);
+    // GridView can redraw the form while other extensions add or remove their own controls.
+    const prefix=root.id.match(/^(.*_)GridView/i)?.[1].replaceAll('_','$');
+    const serverControls=controls.filter(el=>el.name&&(el.tagName==='SELECT'||
+      ['text','search','radio','checkbox'].includes(el.type)&&/search|filter|find|query|term|period|semester|section/i.test(el.name)));
+    const official=serverControls.filter(el=>prefix&&el.name.startsWith(prefix));
+    return (official.length?official:serverControls).sort((a,b)=>a.name.localeCompare(b.name));
   }
-  function reportContext(filters) {
+  function reportContext(filters,gradeReport) {
     const context={};
+    const secondaryYears={الاول:'الأول',الاولي:'الأول',الثاني:'الثاني',الثانيه:'الثاني',الثالث:'الثالث',الثالثه:'الثالث'};
     for(const select of filters){
+      if(select.tagName!=='SELECT')continue;
       const value=digits((select.selectedOptions?.[0]||select.options?.[select.selectedIndex])?.textContent);
       if(!value||!select.value)continue;
       const labels=[select.getAttribute('aria-label'),select.title,...[...select.labels||[]].map(el=>el.innerText),
         ...[select.closest('td')?.nextElementSibling,select.closest('td')?.previousElementSibling].map(el=>el?.innerText)].map(key);
       const name=key(select.name||select.id);
       if(/20\d\d\s*[-–/]\s*20\d\d/.test(value))context.year??=value.match(/20\d\d\s*[-–/]\s*20\d\d/)[0];
-      if(labels.some(label=>/^(?:المستوىالدراسي|المستويالدراسي|الصف(?:الدراسي)?|المرحلهالدراسيه)$/.test(label))||/ddl(?:level|class|grade)|classlevel|studylevel/.test(name)||/^الصف\s/.test(value))context.cls??=value;
-      if(labels.some(label=>/^(?:الشعبه|الفصل|رقمالفصل)$/.test(label))||/ddl(?:section|division)|classsection/.test(name))context.section??=value;
-      if(/^(?:علمي|أدبي|ادبي)$/.test(value))context.stream??=value;
+      if(labels.some(label=>/^(?:المستوىالدراسي|المستويالدراسي|الصف(?:الدراسي)?|المرحلهالدراسيه)$/.test(label))||/(?:ddl|dropdownlist)(?:yearlevel|level|class|grade)$|classlevel|studylevel/.test(name)||/^الصف\s/.test(value)){
+        const secondary=gradeReport&&key(value).match(/^(?:الصف|السنه)?(الاول(?:ي)?|الثاني(?:ه)?|الثالث(?:ه)?)(?:من(?:مرحله)?التعليم)?(?:الثانوي(?:ه)?|ثانوي(?:ه)?)$/);
+        context.cls??=secondary?secondaryYears[secondary[1]]+' ثانوي':value;
+      }
+      if(labels.some(label=>/^(?:الشعبه|الفصل|رقمالفصل)$/.test(label))||/(?:ddl|dropdownlist)(?:section|division)$|classsection/.test(name))context.section??=value;
+      const specialization=key(value).replace(/^(?:ال)?(?:قسم|مسار)/,'').replace(/^ال/,'');
+      if((gradeReport?specialization:key(value))==='علمي')context.stream??='علمي';
+      if((gradeReport?specialization:key(value))==='ادبي')context.stream??='أدبي';
     }
     return context;
   }
@@ -229,14 +255,20 @@ export function readTransferTables(request={}) {
     const total=isSrs||pager?recordTotal(root):null;
     const identityHeader=/رقم\s+(?:القيد|التسجيل)|الرقم\s+الوطني/i.test(labels);
     const studentHeader=/اسم\s+(?:الطالب|التلميذ)|الاسم\s+الكامل/i.test(labels);
-    const meta={index,tableId:root.id,width,rows:rowCount,kind,label:caption||hint||'جدول '+(index+1),
+    const gradeReport=(officialGrade||srsGradeGrid)&&kind==='grades';
+    const meta={index,tableId:root.id,width,rows:rowCount,kind,gradeReport,label:caption||hint||'جدول '+(index+1),
       score:(srsGradeGrid?20:0)+(identityHeader?8:0)+(studentHeader?6:0)+(headerClues.test(labels)?4:0)+(headerCount?2:0),total,paginated:Boolean(pager||total>rowCount)};
     const selected=request.tableId?root.id===request.tableId:request.index===index;
     if(selected){
       if(rowCount>5000)return {error:'الجدول يتجاوز 5000 سجل. اختر فصلًا أصغر من الصفحة.'};
       try {
-        const headerGrid=matrix(headingRows), dataGrid=matrix(cells.slice(headerCount).map(layout));
-        const headerWidth=Math.max(width,...headerGrid.map(row=>row.length),...dataGrid.map(row=>row.length));
+        const dataCells=cells.slice(headerCount);
+        const dataGrid=matrix((gradeReport?dataCells.filter(row=>row.length!==1||span(row[0],'colspan','aria-colspan')===1):dataCells).map(layout));
+        const headerGrid=matrix(headingRows);
+        const headingWidth=Math.max(0,...headerGrid.map(row=>row.length));
+        const dataWidth=Math.max(0,...dataGrid.map(row=>row.length));
+        const headerWidth=Math.max(width,headingWidth,dataWidth);
+        if(gradeReport&&headingWidth>0&&dataWidth>headingWidth)return {updating:true};
         const headerNames=Array.from({length:headerWidth},(_,i)=>{
           const values=headerGrid.map(row=>row[i]).filter(value=>value&&!/^[\d٠-٩۰-۹.,٫\s]+$/.test(value));
           const labels=[...new Set(values)].join(' / ');
@@ -248,7 +280,7 @@ export function readTransferTables(request={}) {
         let size=headerNames.join('').length;
         const rows=[];
         for(const [i,line] of dataGrid.entries()){
-          if(cells[i+headerCount].length===1&&span(cells[i+headerCount][0],'colspan','aria-colspan')>1)continue;
+          if(!gradeReport&&dataCells[i].length===1&&span(dataCells[i][0],'colspan','aria-colspan')>1)continue;
           if(line.every(value=>!value))continue;
           const row=Array.from(headerNames,(_,column)=>line[column]||'');
           if(row.some(value=>value.length>4096))return {error:'إحدى خلايا الجدول طويلة جدًا.'};
@@ -258,17 +290,24 @@ export function readTransferTables(request={}) {
         }
         if(!rows.length)return {error:'الجدول لا يحتوي على بيانات ظاهرة.'};
         const page={number:pager?.number??null,first:Boolean(pager?.first),previous:Boolean(pager?.previous),next:Boolean(pager?.next)};
-        const filters=reportFilters(root), context=reportContext(filters);
+        const filters=reportFilters(root,gradeReport), context=reportContext(filters,gradeReport);
         if(!request.paginate&&!request.turn)return {meta,table:{headers:headerNames,rows},context};
-        const scope=JSON.stringify(filters.map(el=>[el.name||el.id,el.value]));
+        const scope=JSON.stringify(filters.map(el=>{
+          const value=gradeReport&&['radio','checkbox'].includes(el.type)&&!el.checked?'':el.value;
+          return [el.name||el.id,gradeReport?text(value):value];
+        }));
+        const regColumn=gradeReport?headerNames.findIndex(header=>/^(?:رقمالقيد|رقمالتسجيل|رقمقيدالطالب)$/.test(key(header))):-1;
+        const registrations=regColumn>=0?rows.map(row=>digits(row[regColumn])):[];
+        const pageKey=JSON.stringify(registrations.length&&registrations.every(Boolean)?registrations:rows);
         if(request.turn){
-          if(request.from!==page.number||request.scope!==scope||request.firstRow!==JSON.stringify(rows[0]))
+          const sameRows=request.pageKey===undefined?request.firstRow===JSON.stringify(rows[0]):request.pageKey===pageKey;
+          if(request.from!==page.number||request.scope!==scope||!sameRows)
             return {error:'تغيّر الكشف قبل الانتقال إلى الصفحة التالية.'};
           const control=['first','previous','next'].includes(request.turn)&&pager?.[request.turn];
           if(!control)return {error:'لم يظهر رابط الانتقال المطلوب أسفل الكشف.'};
           return clickPage(control);
         }
-        return {meta,table:{headers:headerNames,rows},page,scope,context};
+        return {meta,table:{headers:headerNames,rows},page,scope,context,pageKey,registrations};
       }catch(error){return {error:error.message};}
     }
     candidates.push(meta);
