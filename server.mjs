@@ -224,7 +224,7 @@ function snapshot(root,revision,session,page) {
     recent:admin?[...active].sort((a,b)=>b.created-a.created).slice(0,8).map(({id,name,reg,cls,photo,national,birth})=>({id,name,reg,cls,photo,national,birth})):[]
   }:null;
   if(!admin) {
-    if(data.students)data.students=data.students.map(({photo,...row})=>row);
+    if(data.students)data.students=data.students.map(({photo,specialNeeds,...row})=>row);
     if(data.staff)data.staff=data.staff.map(({id,name,year,job,shift,status,created})=>({id,name,year,job,shift,status,created}));
   }
   const directory=['inter-school-transfers','school-messages','all-student'].includes(page)&&permitted?Object.entries(root.schools).map(([id,s])=>({id,name:s.profile.name,region:s.profile.region})):[];
@@ -378,6 +378,10 @@ function stateUpdate(req,data) {
         }
         for(const row of value) {
           const old=previous.get(row.id);
+          if(session.role!=='admin'){
+            if(old?.specialNeeds===true)row.specialNeeds=true;
+            else delete row.specialNeeds;
+          }else if(Object.hasOwn(row,'specialNeeds')&&typeof row.specialNeeds!=='boolean')fail(400,'حقل الفئات الخاصة غير صالح.');
           if(old&&old.year!==row.year)fail(409,'استخدم الترحيل لإنشاء سجل في سنة دراسية أخرى.');
           if(old&&(old.cls!==row.cls||(old.stream||'')!==(row.stream||''))&&Object.keys(s.grades[row.id]||{}).length)fail(409,'السجل مرتبط بدرجات محفوظة في صفه الحالي.');
           if(old?.photo){row.photo=old.photo;row.photoApproved=old.photoApproved;}
