@@ -231,8 +231,8 @@ forms.certificate=async(data,form)=>{
 actions['certificates-report']=kind=>{
   const f=filterData(route);
   let rows=filterStudents(f).filter(s=>certificateStages.includes(s.cls)).map(s=>({s,r:certificateRow(s)}));
-  if(kind==='top')rows=rows.filter(x=>x.r.status==='ناجح').sort((a,b)=>b.r.percent-a.r.percent).slice(0,10);
-  else if(kind!=='all')rows=rows.filter(x=>x.r.status===kind);
+  if(kind==='top')return gradeTopReport('كشف الطلبة الأوائل',f,rows.map(({s,r})=>({s,...r,complete:Number.isFinite(r.percent)})));
+  if(kind!=='all')rows=rows.filter(x=>x.r.status===kind);
   showReport(kind==='all'?'كشف النتائج':kind==='top'?'كشف الطلبة الأوائل':'كشف النتائج · '+kind,f.year,['رقم القيد','رقم الجلوس','الاسم','الصف','الحالة','المجموع','المعدل'],rows.map(({s,r})=>[s.reg,r.seat||'—',s.name,s.cls,r.status||'—',r.total??'—',r.percent??'—']));
 };
 

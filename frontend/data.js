@@ -34,7 +34,8 @@ const STUDENT_FIELDS = [
   ['year','السنة الدراسية',YEARS,true], ['reg','رقم القيد','text',true], ['national','الرقم الوطني','text'],
   ['name','اسم الطالب','text',true], ['mother','اسم الأم','text'], ['phone','رقم هاتف ولي الأمر','tel'],
   ['nation','الجنسية',NATIONALITIES], ['birth','تاريخ الميلاد','date'], ['gender','الجنس',['ذكر','أنثى']],
-  ['cls','مرحلة الطالب',CLASSES,true], ['section','الفصل',SECTIONS], ['stream','التخصص',['علمي','أدبي']]
+  ['cls','مرحلة الطالب',CLASSES,true], ['section','الفصل',SECTIONS], ['stream','التخصص',['علمي','أدبي']],
+  ['specialNeeds','من طلبة الفئات الخاصة','checkbox']
 ];
 const STUDENT_EXPORT = [['reg','رقم القيد'],['national','الرقم الوطني'],['name','الاسم'],['mother','اسم الأم'],['nation','الجنسية'],['gender','الجنس'],['birth','تاريخ الميلاد'],['cls','الصف'],['section','الفصل'],['stream','التخصص'],['phone','رقم هاتف ولي الأمر']];
 const STAFF_FIELDS = [
@@ -53,7 +54,12 @@ const STAFF_FIELDS = [
   ['curriculum','يمتلك دورات منهجية','checkbox'], ['trained','يمتلك تأهيل تعليمي','checkbox'], ['training','دورات أخرى','text'],
   ['entry_grade','درجة التعيين','text'], ['grade','الدرجة الحالية','text'], ['institution','اسم المؤسسة','text'],
   ['address','محل الإقامة','text'], ['birthplace','مكان الميلاد','text'], ['job_grade','الدرجة الوظيفية','text'],
-  ['job','الوظيفة','text'], ['nation','الجنسية',NATIONALITIES], ['qualification','المؤهل العلمي','text']
+  ['job','الوظيفة','text'], ['nation','الجنسية',NATIONALITIES], ['qualification','المؤهل العلمي','text'],
+  ['specialty','التخصص','text'], ['qualification_type','نوع المؤهل','text'], ['appointment_date','تاريخ التعيين','date'],
+  ['grade_date','تاريخ الحصول على الدرجة الحالية','date'], ['loaned_to','منتدب إلى','text'],
+  ['admin_number','الرقم الإداري','text'], ['school_reg','رقم قيد المدرسة','text'], ['stage','المرحلة التعليمية','text'],
+  ['supervision','اسم المراقبة','text'], ['passport','رقم جواز السفر','text'], ['residency','رقم الإقامة','text'],
+  ['bank','المصرف','text'], ['bank_branch','فرع المصرف','text'], ['bank_account','رقم الحساب','text']
 ];
 const GRADE_ROUTES = ['add_kindergarten_grades','add_grades','add_activity_grades','student-grades-sse','remedial_grades','student-grades-ninth','student-grades-first-secondary','student-grades-second-secondary','student-grades-third-secondary','vertical-grades'];
 const SUBJECTS = {

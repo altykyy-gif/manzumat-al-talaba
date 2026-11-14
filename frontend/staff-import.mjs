@@ -9,7 +9,10 @@ const staffIdentifier=value=>{
   return /^(?:0+|[-—–]+)$/.test(identifier)?'':identifier;
 };
 const staffImportAliases={name:['اسم الموظف','اسم المعلم','الاسم'],national:['رقم وطني','رقم الهوية'],
-  education:['رقم تعليمي'],financial:['رقم مالي'],shift:['الدوام'],year:['العام الدراسي']};
+  education:['رقم تعليمي'],financial:['رقم مالي'],shift:['الدوام'],year:['العام الدراسي'],
+  bank:['اسم المصرف'],bank_branch:['فرع','الفرع'],bank_account:['رقم الحساب المصرفي','الحساب'],
+  start:['تاريخ أول مباشرة','تاريخ مباشرة العمل'],degree_year:['سنة الحصول على المؤهل'],
+  bonus:['العلاوة الحالية'],job:['الوظيفة الحالية'],admin_number:['رقم إداري']};
 
 function staffImportDate(value) {
   const text=staffDigits(value);

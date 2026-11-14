@@ -87,7 +87,7 @@ function gradePage() {
   const draftCount=[...gradeDraft.values()].filter(entry=>entry.school===activeSchoolId&&entry.key.startsWith(source+'|')).length;
   const reportControls=`<div class="report-buttons">${reports.map(([id,label])=>btn(label,'grades-report',id,id.startsWith('period')||id==='final'?'outline-blue':'soft')).join('')}</div>`;
   const publishing=source===routeForClass(f.cls)?card(`<div class="btns">${btn('إعدادات عرض النتائج للطلبة','publish-settings','','outline-blue')}${supportsResultRules(source,plan)?btn(plan.rules?'قواعد الدرجات والنجاح':'إعداد قواعد النجاح','grading-settings'):''}</div><p class="small muted gap">${school().published[yearKey(f.year,f.cls,f.stream)]?'عرض النتائج مفعّل للصف المختار.':'عرض النتائج متوقف للصف المختار.'}</p>`,'التحكم في عرض النتائج للطلاب عبر الرابط'):'';
-  const raster=`<div class="report-buttons">${btn('طباعة الكشف العادي','grades-report','marks','outline-dark')}${btn('تحميل الكشف العادي (Excel)','grades-export','','outline-green')}${btn('طباعة الكشف المفصل','grades-report','detailed','outline-blue')}</div>`;
+  const raster=`<div class="report-buttons">${btn('طباعة الكشف العادي','grades-report','marks','outline-dark')}${btn('تحميل الكشف العادي (Excel)','grades-export','','outline-green')}${btn('طباعة الكشف المفصل','grades-report','detailed','outline-blue')}${btn('تحميل الكشف المفصل (Excel)','grades-report','detailed-excel','outline-green')}</div>`;
   return header(title+' - الصف: '+f.cls,'',f.year)+`<div class="grade-panes">
     <div class="grid2">${card(filterForm(route,search,f),'الفلاتر')}${publishing}</div>${card(reportControls,'أدوات الطباعة والتقارير')}${card(raster,'كشف رصد الدرجات')}
     <div class="grid2">${card(filterForm(route,viewFields,f),source==='add_grades'?'التحكم في عرض أعمدة الفترات':'التحكم في عرض أعمدة الدرجات')}${card(`<div class="report-buttons">${btn('تصدير ملف الدرجات Excel','grades-export','','outline-green')}${btn('رفع الدرجات','grades-import','','outline-blue')}</div>`,'أدوات التصدير والاستيراد')}</div>
@@ -163,7 +163,9 @@ function studentResult(student,s=school(),source=routeForClass(student.cls),indi
   const summary=retake&&plan.rules?
     gradeRetakeSummary(gradePlan(mainSource,student.cls,student.stream,student.year),mainSource,marks):
     gradeSummary(plan,source,marks,indices);
-  const assessment=plan.rules?curriculumResult(summary,plan.rules,indices,retake):classifyResult(summary,s.gradingRules?.[key]);
+  const legacyRule=s.gradingRules?.[key];
+  const assessment=indices?periodResult(summary,plan,source,marks,indices,legacyRule):
+    plan.rules?curriculumResult(summary,plan.rules,null,retake):classifyResult(summary,legacyRule);
   const status=indices||retake?assessment.status:student.outcome||assessment.status;
   return {...summary,...assessment,status,published:Boolean(s.published[key])};
 }
@@ -188,9 +190,15 @@ forms.publish=async(data,form)=>{
   await update(s=>{s.published[form.dataset.key]=Boolean(data.publish);});
   $('#modal').close();render();flash('حُفظ إعداد النشر.');
 };
+function gradeReportPeriods(source,plan) {
+  if(plan.components.length===4)return [{label:'الفصل الأول',indices:[0,1]},{label:'الفصل الثاني',indices:[2,3]}];
+  const ordinals=['الأولى','الثانية','الثالثة'];
+  return plan.components.map((label,i)=>({
+    label:source==='add_grades'||label.startsWith('أعمال - فترة')?'الفترة '+ordinals[i]:label,indices:[i]
+  }));
+}
 function gradeReportChoices(source,plan) {
-  const groups=plan.components.length===4?[['period:0,1','صحيفة الفصل الأول'],['period:2,3','صحيفة الفصل الثاني']]:
-    plan.components.map((label,i)=>['period:'+i,'صحيفة '+label.replace('أعمال - ','').replace(/^أعمال فترة .* - /,'')]);
+  const groups=gradeReportPeriods(source,plan).map(({label,indices})=>['period:'+indices.join(','),'صحيفة '+label]);
   if(source==='add_grades')return [
     ...['الأولى','الثانية','الثالثة'].flatMap((label,i)=>[['period:'+i,'صحيفة الفترة '+label],['weak:'+i,'كشف المواد الضعيفة - فترة '+(i+1)]]),
     ['final','صحيفة النتيجة النهائية'],['double','صحيفة النتيجة النهائية (بطاقة بوجهين)'],['periods','صحيفة الفترات'],
@@ -200,16 +208,27 @@ function gradeReportChoices(source,plan) {
   const items=[...groups,['final','صحيفة النتيجة النهائية'],['review','تقرير المراجعة']];
   if(source==='add_kindergarten_grades'||source==='add_activity_grades')return items;
   if(source==='remedial_grades')return [['review','كشف مراجعة درجات الدور الثاني'],['final','صحيفة درجات الدور الثاني']];
-  return [...items,['periods','صحائف الفترات'],['double','صحيفة النتيجة النهائية (بطاقة بوجهين)'],['top','العشرة الأوائل'],['passed','كشف الناجحين'],['remedial','كشف الدور الثاني'],['weak','كشف المواد الضعيفة'],['needed','كشف احتياج النجاح'],['rate','نسبة النجاح العامة'],['subject-count','عدد طلبة الدور الثاني حسب المادة']];
+  const certificate=['student-grades-ninth','student-grades-third-secondary'].includes(source);
+  const rankings=certificate?['الأولى','الثانية'].flatMap((label,i)=>[
+    ['passed:'+i,'كشف الناجحين الفترة '+label],['top:'+i,'كشف العشرة الأوائل الفترة '+label]
+  ]):[['top:0,1','كشف العشرة الأوائل الفصل الأول']];
+  return [...items,['periods','صحائف الفترات'],['double','صحيفة النتيجة النهائية (بطاقة بوجهين)'],...rankings,
+    ['top',certificate?'كشف العشرة الأوائل النتيجة النهائية':'كشف العشرة الأوائل الدور الأول'],
+    ['passed',certificate?'كشف الناجحين النتيجة النهائية':'كشف الناجحين الدور الأول'],['remedial','كشف الدور الثاني'],
+    ['needed','كشف احتياج النجاح للتلاميذ في الدور الثاني'],['remedial-excel','تحميل كشف الدور الثاني (Excel)'],
+    ['weak','كشف المواد الضعيفة'],['rate','نسبة النجاح العامة'],['subject-count','عدد طلبة الدور الثاني حسب المادة']];
 }
 forms['grade-report']=data=>actions['grades-report'](data.kind);
 actions['grades-report']=kind=>{
   const view=gradeView();
-  if(['marks','review','detailed'].includes(kind)) {
+  if(kind==='review'&&view.source!=='remedial_grades')return gradeReviewReport(view);
+  if(['marks','review','detailed','detailed-excel'].includes(kind)) {
     const file=gradeRows(view);
-    if(kind==='detailed'){
+    if(kind.startsWith('detailed')){
+      const title='كشف رصد الدرجات المفصل', headers=['رقم القيد','اسم الطالب','المادة',...view.indexes.map(i=>view.plan.components[i])];
       const records=view.all.flatMap(s=>view.items.map(item=>[s.reg,s.name,item.label,...view.indexes.map(i=>school().grades[s.id]?.[gradeKey(view.source,item.key,i)]??'—')]));
-      return schoolListReport('كشف رصد الدرجات المفصل',view.f.year,['رقم القيد','اسم الطالب','المادة',...view.indexes.map(i=>view.plan.components[i])],[{rows:records}]);
+      if(kind==='detailed-excel')return downloadExcel(title,headers,records);
+      return schoolListReport(title,view.f.year,headers,[{rows:records}]);
     }
     return schoolListReport(kind==='review'?'تقرير مراجعة الدرجات':'كشف رصد الدرجات',view.f.year,file.headers,[{rows:file.rows}],{orientation:'أفقي',fontSize:10,rowsPerPage:18});
   }
@@ -220,12 +239,14 @@ actions['grades-report']=kind=>{
   const sourceRows=['period','final','periods','double'].includes(type)&&hasSelection?view.all.filter(s=>selection.has(s.id)):view.all;
   const summaries=sourceRows.map(s=>({s,...studentResult(s,school(),view.source,indices)}));
   const title=gradeReportChoices(view.source,view.plan).find(([key])=>key===kind)?.[1]||'صحيفة النتيجة';
-  if(['top','passed','remedial'].includes(type)) {
-    let rows=summaries;
-    if(type==='top')rows=rows.filter(x=>x.percent!==null).sort((a,b)=>b.percent-a.percent||localeCompare(a.s.name,b.s.name)).slice(0,10);
-    if(kind==='passed')rows=rows.filter(x=>['ناجح','منقول'].includes(x.status));
-    if(kind==='remedial')rows=rows.filter(x=>x.status==='دور ثان');
-    return schoolListReport(title,view.f.year,['رقم القيد','اسم الطالب','المجموع','النسبة','الحالة'],[{rows:rows.map(x=>[x.s.reg,x.s.name,x.complete?x.total:'—',x.percent??'—',x.status||'—'])}]);
+  if(type==='top')return gradeTopReport(title,view.f,summaries);
+  if(['passed','remedial','remedial-excel'].includes(type)) {
+    const rows=summaries.filter(row=>type==='passed'?isPassingGrade(row.status):row.status==='دور ثان');
+    const headers=['ر.م','رقم القيد','اسم الطالب','الفصل','المجموع','النسبة','التقدير','الحالة',...(type==='passed'?[]:['المواد'])];
+    const records=rows.map((row,i)=>[i+1,row.s.reg,row.s.name,row.s.section||'',row.complete?row.total:'',
+      row.percent===null?'':row.percent+'%',gradeRating(row.percent),row.status,...(type==='passed'?[]:[row.weak.map(w=>w.label).join('، ')])]);
+    if(type==='remedial-excel')return downloadExcel('كشف الدور الثاني',headers,records);
+    return schoolListReport(title,view.f.year,headers,[{rows:records}],{orientation:'أفقي',fontSize:12});
   }
   if(type==='final'&&view.source==='remedial_grades'&&view.plan.rules){
     const columns=['رقم القيد','اسم الطالب',...view.plan.items.map(item=>item.label),'المجموع','النسبة','الحالة'];
@@ -340,17 +361,22 @@ forms['attendance-clear']=async()=>{
 const attendanceReportRanges=[['يومي','اليومي'],['أسبوعي','الأسبوعي'],['شهري','الشهري']];
 function attendanceReportControls(staff) {
   const f=filterData(route,{date:dayISO()});
-  return `<form data-form="attendance-report" class="stack"><div class="fields tight">${field(['date','تاريخ التقرير','date',true],f.date)}${staff?'':field(['period','الفترة',[['','جميع الفترات'],...ATTENDANCE_PERIODS.map((name,i)=>[String(i),name])]],'')}</div><div class="report-buttons">${[false,true].flatMap(absent=>attendanceReportRanges.map(([range,label])=>`<button type="submit" name="scope" value="${range}|${Number(absent)}" class="btn ${absent?'danger':'outline-blue'}">${icon('print')} ${absent?'كشف الغياب':'كشف الحضور والغياب'} ${label}</button>`)).join('')}</div></form>`;
+  const controls=(excel)=>[false,true].flatMap(absent=>attendanceReportRanges.map(([range,label])=>{
+    const text=excel?'تصدير Excel ('+range+(absent?' - الغائبين':'')+')':'طباعة التقرير '+label+(absent?' (الغائبين)':'');
+    return `<button type="submit" name="scope" value="${range}|${Number(absent)}|${Number(excel)}" class="btn ${excel?'outline-green':absent?'danger':'outline-blue'}">${icon(excel?'download':'print')} ${esc(text)}</button>`;
+  })).join('');
+  return `${staff?staffAttendanceReportMenu():''}<form data-form="attendance-report" class="stack gap"><div class="fields tight">${field(['date','تاريخ التقرير','date',true],f.date)}${staff?'':field(['period','الفترة',[['','جميع الفترات'],...ATTENDANCE_PERIODS.map((name,i)=>[String(i),name])]],'')}</div><div class="report-buttons">${controls(false)}</div>${staff?'':'<div class="report-buttons">'+controls(true)+'</div>'}</form>`;
 }
 actions['attendance-reports']=()=>showDialog('أدوات الطباعة والتقارير',attendanceReportControls(route==='staff-attendance'));
 forms['attendance-report']=(data,_form,event)=>{
-  const [range,absent]=str(event.submitter?.value).split('|');
+  const [range,absent,excel]=str(event.submitter?.value).split('|');
   const staff=route==='staff-attendance', f=filterData(route,{date:dayISO()}), records=school()[staff?'staffAttendance':'attendance'];
   const periods=staff?[0]:['0','1','2'].includes(data.period)?[Number(data.period)]:[0,1,2];
   const periodNames=staff?['الحالة']:periods.map(i=>ATTENDANCE_PERIODS[i]);
   const people=attendanceRows(staff,{...f,status:''});
   const report=buildAttendanceReport(people,records,{staff,year:f.year,date:data.date||f.date,range,periods,periodNames,absentOnly:absent==='1',status:f.status});
   const title='كشف '+(absent==='1'?'الغياب':'الحضور والغياب')+' '+attendanceReportRanges.find(([key])=>key===range)[1]+' '+(staff?'للموظفين':'للطلبة');
+  if(excel==='1')return downloadExcel(title,report.headers,report.rows);
   const scope=[report.label,staff?f.shift:[f.cls,f.section,f.stream].filter(Boolean).join(' · '),
     !staff?(periods.length===1?periodNames[0]:'جميع الفترات'):'',f.status].filter(Boolean);
   const meta=scope.map(label=>'<span><bdi>'+esc(label)+'</bdi></span>').join('')+

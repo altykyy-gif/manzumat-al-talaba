@@ -59,7 +59,10 @@ pages['all-staff']=()=>{
   const f=filterData(route), page=paginate(route,staffRows(f),f), staff=onlyYear(school().staff,f.year);
   const jobs=[...new Set(staff.map(s=>s.job).filter(Boolean))], states=[...new Set(staff.map(s=>s.status).filter(Boolean))];
   return header('جميع الموظفين','قائمة بيانات العاملين',f.year)+card(filterForm(route,[FILTER_YEAR,['q','بحث','search'],['job','الوظيفة',jobs],['status','الحالة الوظيفية',states],FILTER_LIMIT],f))+
-    `<div class="btns gap">${link('إضافة معلم/موظف','add-staff','green')}${btn('استيراد الموظفين','staff-import-dialog','','outline-blue')}${btn('تنزيل إكسل','staff-export')}${btn('أدوات الطباعة والتقارير','staff-report')}</div>${table(['#',...labelsFor(staffColumns),'إجراءات'],page.rows.map((s,i)=>[page.offset+i+1,...valuesFor(s,staffColumns),raw(`<div class="row-tools">${btn('تعديل','staff-edit',s.id,'tiny soft')}${btn('بطاقة البيانات','staff-card',s.id,'tiny soft')}</div>`)]))}${page.tools}`;
+    `<div class="btns gap">${link('إضافة معلم/موظف','add-staff','green')}${btn('استيراد الموظفين','staff-import-dialog','','outline-blue')}${btn('تنزيل إكسل','staff-export')}${btn('أدوات الطباعة والتقارير','staff-report')}</div>${table(['#',...labelsFor(staffColumns),'إجراءات'],page.rows.map((s,i)=>{
+      const reports=btn('التقارير','staff-row-reports',s.id,'tiny outline-blue').replace('<button ','<button aria-label="تقارير '+esc(s.name)+'" ');
+      return [page.offset+i+1,...valuesFor(s,staffColumns),raw(`<div class="row-tools">${btn('تعديل','staff-edit',s.id,'tiny soft')}${reports}</div>`)];
+    }))}${page.tools}`;
 };
 actions['staff-import-dialog']=()=>showDialog('استيراد الموظفين',importCard('staff','الموظفين',filterData(route).year));
 actions['staff-export']=()=>downloadExcel('سجل العاملين',labelsFor(STAFF_FIELDS),staffRows(filterData(route)).map(s=>valuesFor(s,STAFF_FIELDS)));
@@ -76,7 +79,7 @@ function staffContinuityRows(rows) {
   return rows.filter(person=>['يعمل','مستمر','على رأس العمل','مباشر'].includes(person.status));
 }
 actions['staff-report']=kind=>{
-  if(!Object.hasOwn(staffReports,kind))return showDialog('أدوات الطباعة والتقارير',`<div class="report-buttons">${Object.entries(staffReports).map(([key,[label]])=>btn(label,'staff-report',key,'outline-blue')).join('')}${btn('إفادة استمرارية العمل','staff-continuity','','outline-blue')}${link('تقارير حضور وغياب الموظفين','staff-attendance','soft')}</div>`);
+  if(!Object.hasOwn(staffReports,kind))return showDialog('أدوات الطباعة والتقارير',staffReportMenu()+`<div class="report-buttons gap">${Object.entries(staffReports).map(([key,[label]])=>btn(label,'staff-report',key,'soft')).join('')}${btn('إفادة استمرارية العمل','staff-continuity','','soft')}${link('تقارير حضور وغياب الموظفين','staff-attendance','soft')}</div>`);
   const f=filterData(route), staff=staffRows(f), [title,keys]=staffReports[kind];
   if(kind==='stats'){
     const jobs=new Map();
@@ -113,10 +116,6 @@ forms['staff-continuity']=data=>{
   if(staff.start)details.push(['تاريخ المباشرة المسجل',staff.start]);
   continuityDocument('إفادة استمرارية العمل',staff.year,details,
     'تفيد إدارة المدرسة بأن الموظف الواردة بياناته أدناه مستمر في العمل لديها حسب سجلاتها للعام الدراسي الموضح.',data);
-};
-actions['staff-card']=id=>{
-  const s=lookup('staff',id);
-  showReport('بطاقة بيانات موظف',s.year,['الحقل','البيان'],STAFF_FIELDS.map(([key,label])=>[label,typeof s[key]==='boolean'?(s[key]?'نعم':'لا'):s[key]||'—']));
 };
 function parseMoney(value) {
   const input=digits(value);
