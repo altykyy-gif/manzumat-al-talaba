@@ -14,12 +14,12 @@ const bounded = (value,min,max,fallback) => {
   const number=Number(value);
   return value!==''&&Number.isFinite(number)?Math.max(min,Math.min(max,Math.floor(number))):fallback;
 };
-function paperHeading(title,profile) {
+function paperHeading(title,profile,authorityLine='') {
   const authority=profile.printLogoHidden?'':imageMarkup(profile.printLogo,'شعار الجهة التعليمية');
   const schoolLogo=profile.photoHidden?'':imageMarkup(profile.photo,'شعار المدرسة');
-  return `<header class="school-paper-head"><div class="paper-logo">${authority}</div><div class="paper-center"><div class="paper-gov">دولة ليبيا<br>وزارة التربية والتعليم<br>${esc(profile.name)}</div><h2>${esc(title)}</h2></div><div class="paper-logo">${schoolLogo}</div></header>`;
+  return `<header class="school-paper-head"><div class="paper-logo">${authority}</div><div class="paper-center"><div class="paper-gov">دولة ليبيا<br>وزارة التربية والتعليم<br>${authorityLine?esc(authorityLine)+'<br>':''}${esc(profile.name)}</div><h2>${esc(title)}</h2></div><div class="paper-logo">${schoolLogo}</div></header>`;
 }
-function paperFrame(title,year,body,{variant='roster',profile=school().profile,settings={},meta='',signatures=true,page=0,pages=0}={}) {
+function paperFrame(title,year,body,{variant='roster',profile=school().profile,settings={},meta='',signatures=true,page=0,pages=0,authorityLine=''}={}) {
   const style=[
     '--paper-font:'+ (PAPER_FONTS[settings.font]||PAPER_FONTS.Cairo),
     '--paper-size:'+ bounded(settings.fontSize,10,24,variant==='grades'?13:14)+'px',
@@ -31,7 +31,7 @@ function paperFrame(title,year,body,{variant='roster',profile=school().profile,s
   ].join(';');
   const stamp=sharedMode&&!sharedDemo?'منظومة الطلبة':'منظومة الطلبة · كشف تجريبي';
   const sign=signatures?`<div class="paper-signatures"><div><strong>اعتماد مشرف شؤون الطلبة</strong><br>الاسم: ____________________<br>التوقيع: ____________________</div><div><strong>اعتماد إدارة المدرسة</strong><br>مدير المدرسة: ${esc(profile.principal||'____________________')}<br>التوقيع: ____________________</div></div>`:'';
-  return `<article class="school-paper paper-${variant}${settings.borderType==='box'?' paper-box':''}" style="${esc(style)}" dir="rtl"><div class="school-paper-content">${paperHeading(title,profile)}${meta?'<div class="paper-meta">'+meta+'</div>':''}${body}${sign}</div><footer class="school-paper-foot"><div class="paper-footer-line"><span>${esc(stamp)}</span><span>السنة الدراسية <bdi>${esc(year)}</bdi></span><span>تاريخ الطباعة: <bdi>${esc(dayISO())}</bdi></span>${pages>1?`<bdi>${page} / ${pages}</bdi>`:''}</div></footer></article>`;
+  return `<article class="school-paper paper-${variant}${settings.borderType==='box'?' paper-box':''}" style="${esc(style)}" dir="rtl"><div class="school-paper-content">${paperHeading(title,profile,authorityLine)}${meta?'<div class="paper-meta">'+meta+'</div>':''}${body}${sign}</div><footer class="school-paper-foot"><div class="paper-footer-line"><span>${esc(stamp)}</span><span>السنة الدراسية <bdi>${esc(year)}</bdi></span><span>تاريخ الطباعة: <bdi>${esc(dayISO())}</bdi></span>${pages>1?`<bdi>${page} / ${pages}</bdi>`:''}</div></footer></article>`;
 }
 function paperTable(headers,rows,name='الكشف') {
   return table(headers,rows,{name,className:'school-paper-table'});

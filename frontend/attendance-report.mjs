@@ -39,7 +39,8 @@ export function buildAttendanceReport(people,records,options) {
     if(absentOnly&&!absences||status&&!marks.some(states=>states.includes(status)))continue;
     const identity=[entries.length+1,...(staff?[person.education||person.financial||'',person.name,person.job,person.shift]:[person.reg,person.name,person.cls,person.section])];
     if(!calendar){
-      const row=[...identity,...marks[0],...(staff?[daily[0][person.id]?.note||'']:[])];
+      const values=absentOnly?marks[0].map(state=>state==='غائب'?state:''):marks[0];
+      const row=[...identity,...values,...(staff?[daily[0][person.id]?.note||'']:[])];
       entries.push({row,display:row});
       continue;
     }

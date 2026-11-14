@@ -188,7 +188,8 @@ setInterval(()=>{
 },1000);
 
 function studentForm(student={},quick=false) {
-  const defs=quick?STUDENT_FIELDS.filter(def=>['year','reg','name','cls','gender','section','stream'].includes(def[0])):STUDENT_FIELDS;
+  const defs=quick?STUDENT_FIELDS.filter(([key])=>['year','reg','name','cls','gender','section','stream'].includes(key)):
+    STUDENT_FIELDS.filter(([key])=>key!=='specialNeeds'||session?.role==='admin');
   const stream=defs.find(([key])=>key==='stream');
   const needsStream=['الثاني ثانوي','الثالث ثانوي'].includes(student.cls);
   return `<form data-form="student" data-id="${esc(student.id||'')}" class="stack">${formFields(defs.filter(([key])=>key!=='stream'),student)}<div class="student-stream"${needsStream?'':' hidden'}>${field([stream[0],stream[1],stream[2],needsStream],student.stream,{blank:'اختر التخصص'})}</div>${submit('حفظ المعلومات','green block')}</form>`;
@@ -230,6 +231,7 @@ const formText = data => Object.fromEntries(Object.entries(data).map(([k,v])=>[k
 forms.student=async(data,form)=>{
   const id=form.dataset.id;
   const entry=formText(data);
+  if(form.elements.specialNeeds)entry.specialNeeds=Boolean(data.specialNeeds);
   await update(s=>{
     const existing=s.students.find(x=>x.id===id);
     if(id&&!existing)throw new Error('هذا السجل لم يعد موجودًا.');
@@ -246,7 +248,7 @@ forms.student=async(data,form)=>{
 function studentDataTable(rows,archive=false,offset=0) {
   if(archive)return table(['#','رقم القيد','الاسم','الصف','الفصل','التخصص','ملاحظات النقل','تاريخ النقل','إجراءات'],rows.map((s,i)=>[i+1,s.reg,s.name,s.cls,s.section,s.stream,s.archive.note,s.archive.date,raw(s.archive.interTransfer?'نقل معتمد':btn('استرجاع','restore-student',s.id,'tiny soft'))]));
   const action=(label,name,id,glyph,color)=>`<button type="button" class="btn tiny ${color}" aria-label="${esc(label)}" title="${esc(label)}" data-action="${name}" data-value="${esc(id)}">${icon(glyph)}</button>`;
-  return table(['#','رقم القيد','الرقم الوطني','اسم الطالب','اسم الام','الجنسية','الجنس','تاريخ الميلاد','الصف','التخصص','الفصل','الصورة','إجراءات'],rows.map((s,i)=>[i+offset+1,s.reg,s.national,s.name,s.mother,s.nation,s.gender,s.birth,s.cls,s.stream,s.section,raw(studentAvatar(s)),raw(`<div class="row-tools">${action('تعديل','edit-student',s.id,'edit','warning')}${action('نقل','transfer-student',s.id,'transfer','info')}${action('حذف','delete-student',s.id,'remove','red')}${action('بطاقة بيانات','student-card',s.id,'list','secondary')}${action('إفادة استمرارية الدراسة','continuity-request',s.id,'print','secondary')}</div>`)]),{className:'table-dark'});
+  return table(['#','رقم القيد','الرقم الوطني','اسم الطالب','اسم الام','الجنسية','الجنس','تاريخ الميلاد','الصف','التخصص','الفصل','الصورة','إجراءات'],rows.map((s,i)=>[i+offset+1,s.reg,s.national,s.name,s.mother,s.nation,s.gender,s.birth,s.cls,s.stream,s.section,raw(studentAvatar(s)),raw(`<div class="row-tools">${action('تعديل','edit-student',s.id,'edit','warning')}${action('نقل','transfer-student',s.id,'transfer','info')}${action('حذف','delete-student',s.id,'remove','red')}${action('بطاقة بيانات','student-card',s.id,'list','secondary')}${action('إفادة استمرارية الدراسة','continuity-request',s.id,'print','secondary')}${action('تقارير الطالب','student-paper-menu',s.id,'print','secondary')}</div>`)]),{className:'table-dark'});
 }
 function studentRowsFor(page) {
   const f=filterData(page,page==='all-student'?{limit:'10',sort:'الافتراضي'}:{});
@@ -377,6 +379,11 @@ forms['student-report']=(data,_form,event)=>{
 actions['student-print']=kind=>{
   const rows=studentRowsFor(route), f=filterData(route);
   if(kind==='archive')return schoolListReport('كشف الطلبة المنتقلين',f.year,['رقم القيد','اسم الطالب','الصف','الفصل','ملاحظات النقل','تاريخ النقل'],[{rows:rows.map(s=>[s.reg,s.name,s.cls,s.section,s.archive.note,s.archive.date])}]);
+  if(kind==='special'){
+    if(session?.role!=='admin')throw new Error('كشف الفئات الخاصة متاح لمدير المدرسة.');
+    return schoolListReport('كشف طلبة الفئات الخاصة',f.year,['ر.م','رقم القيد','اسم الطالب','الصف','الفصل'],
+      [{rows:rows.filter(s=>s.specialNeeds===true).map((s,i)=>[i+1,s.reg,s.name,s.cls,s.section])}]);
+  }
   schoolListReport('كشف الطلبة الأجانب',f.year,labelsFor(INTAKE_TEMPLATE),[{rows:rows.filter(s=>s.nation&&s.nation!=='ليبيا').map(s=>valuesFor(s,INTAKE_TEMPLATE))}],{orientation:'أفقي',fontSize:12});
 };
 actions['student-stats']=()=>{

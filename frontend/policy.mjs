@@ -265,6 +265,26 @@ export function curriculumResult(result,rules,indices=null,retake=false) {
   const status=!weak.length?'ناجح':retake||weak.length>(rules.maxSecondRoundSubjects??Infinity)?'راسب':'دور ثان';
   return {status,weak};
 }
+export function periodResult(result,plan,source,marks,indices,legacyRule) {
+  if(!result.complete||result.percent===null)return {status:'',weak:[]};
+  if(!plan.rules&&legacyRule?.enabled)return classifyResult(result,legacyRule);
+  if(plan.rules?.autoPromote)return {status:'ناجح',weak:[]};
+  const rate=plan.rules?.minTotal??(source==='add_grades'?.40:.50);
+  const exams=indices.filter(index=>plan.rules?.finalIndexes?.includes(index));
+  const weak=result.subjects.flatMap((subject,i)=>{
+    const item=plan.items[i];
+    const examNeed=exams.length?sumGrades(exams.map(index=>item.max[index]))*plan.rules.minFinal-
+      sumGrades(exams.map(index=>marks[gradeKey(source,item.key,index)])):0;
+    const need=Math.max(0,roundGrade(subject.max*rate-subject.mark),roundGrade(examNeed));
+    return need?[{...subject,need}]:[];
+  });
+  return {status:weak.length?'راسب':'ناجح',weak};
+}
+
+export function gradeRating(percent) {
+  if(typeof percent!=='number'||!Number.isFinite(percent)||percent<0||percent>100)return '';
+  return percent>=85?'ممتاز':percent>=75?'جيد جداً':percent>=65?'جيد':percent>=50?'مقبول':'ضعيف';
+}
 export function classifyResult(result,rule) {
   if(!rule?.enabled||!result.complete||result.percent===null)return {status:'',weak:[]};
   const weak=result.rows.filter(([,mark,max])=>typeof mark==='number'&&max>0&&mark*100<Number(rule.subject)*max)

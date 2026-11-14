@@ -50,68 +50,207 @@ function outcomeReport(kind,title,year,summaries) {
   const rows=summaries.filter(x=>kind!=='needed'||x.status==='دور ثان').flatMap(x=>x.weak.map(w=>[x.s.reg,x.s.name,w.label,w.mark,w.max,...(kind==='needed'?[w.need]:[])]));
   showReport(title,year,['رقم القيد','اسم الطالب','المادة','الدرجة','الدرجة الكبرى',...(kind==='needed'?['الاحتياج']:[])],rows);
 }
-function gradePaperPeriods(view,indices) {
-  const primary=view.source==='add_grades';
-  const labels=primary?['الفترة الأولى (30%)','الفترة الثانية (30%)','الفترة الثالثة (40%)']:view.plan.components;
-  if(indices)return [{label:primary?labels[indices[0]].split(' (')[0]:indices.length===1?labels[indices[0]]:indices[0]===0?'الفصل الأول':'الفصل الثاني',indices}];
-  const groups=primary||labels.length!==4?labels.map((label,i)=>({label,indices:[i]})):[{label:'الفصل الأول',indices:[0,1]},{label:'الفصل الثاني',indices:[2,3]}];
-  const worksOnly=['student-grades-ninth','student-grades-third-secondary'].includes(view.source)&&!view.plan.certificate;
-  return [...groups,{label:worksOnly?'مجموع أعمال السنة':'النتيجة النهائية (100%)',indices:null}];
+const isPassingGrade=status=>['ناجح','منقول'].includes(status);
+const eligibleForGradeRanking=row=>isPassingGrade(row.status)&&row.complete&&Number.isFinite(row.percent);
+function gradeTopReport(title,filters,summaries) {
+  const percentage=row=>row.max>0?100*row.total/row.max:row.percent;
+  const ranked=summaries.filter(eligibleForGradeRanking).sort((a,b)=>
+    percentage(b)-percentage(a)||localeCompare(a.s.name,b.s.name)||localeCompare(a.s.reg,b.s.reg)).slice(0,10);
+  const rows=ranked.map((row,i)=>[i+1,row.s.name,row.percent+'%',gradeRating(percentage(row))]);
+  const meta=[filters.cls,filters.section,filters.stream].filter(Boolean).map(value=>'<span>'+esc(value)+'</span>').join('');
+  schoolListReport(title,filters.year,['الترتيب','الاسم','النسبة','التقدير'],[{rows,meta}],
+    {orientation:'عمودي',font:'Cairo',variant:'rank',fontSize:15,rowsPerPage:10});
 }
-function gradePaperMarks(view,student,groups) {
-  const marks=(view.school||school()).grades[student.id]||{};
-  const scores=groups.map(group=>gradeSummary(view.plan,view.source,marks,group.indices));
-  const header=`<tr><th rowspan="2" scope="col">المادة</th>${groups.map(group=>`<th colspan="2" scope="colgroup">${esc(group.label)}</th>`).join('')}</tr><tr>${groups.map(()=>'<th scope="col">الدرجة الكبرى</th><th scope="col">درجة التلميذ</th>').join('')}</tr>`;
-  const rows=view.plan.items.map((item,i)=>[item.label,...scores.flatMap(score=>[score.rows[i][2],score.rows[i][1]])]);
-  const numeric=view.plan.items.some(item=>!item.choices);
-  if(numeric)rows.push(['المجموع الكلي',...scores.flatMap(score=>[sum(score.rows.map(row=>typeof row[2]==='number'?row[2]:0))||'—',score.complete?score.total:'—'])]);
-  return `<table class="school-paper-table grade-marks" aria-label="درجات التلميذ"><colgroup><col>${'<col>'.repeat(groups.length*2)}</colgroup><thead>${header}</thead><tbody>${rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value)+'</td>').join('')+'</tr>').join('')}</tbody></table>`;
+
+function gradePaperTable(label,head,rows,columnCount,variant='grade-marks') {
+  return `<table class="school-paper-table ${variant}" aria-label="${esc(label)}"><colgroup><col>${'<col>'.repeat(columnCount-1)}</colgroup><thead>${head}</thead>
+    <tbody>${rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value)+'</td>').join('')+'</tr>').join('')}</tbody></table>`;
 }
-function gradePaperActivity(view,student,groups) {
+function gradePaperScores(view,marks,groups) {
+  return groups.map(group=>gradeSummary(view.plan,view.source,marks,group.indices));
+}
+const paperGrade=value=>value==='—'?'':value??'';
+const gradePaperLabel=(view,group)=>{
+  if(view.source!=='add_grades')return group.label;
+  return group.label+' ('+([30,30,40][group.indices[0]])+'%)';
+};
+function gradePaperMarks(view,marks,groups,{yearTotal=false}={}) {
+  const sections=[...groups];
+  if(yearTotal)sections.push({label:'النتيجة النهائية (100%)',indices:null});
+  const scores=gradePaperScores(view,marks,sections);
+  const head=`<tr><th rowspan="2" scope="col">المادة</th>${sections.map(group=>`<th colspan="2" scope="colgroup">${esc(group.indices?gradePaperLabel(view,group):group.label)}</th>`).join('')}</tr>
+    <tr>${sections.map(()=>'<th scope="col">الدرجة الكبرى</th><th scope="col">درجة التلميذ</th>').join('')}</tr>`;
+  const rows=view.plan.items.map((item,i)=>[item.label,...scores.flatMap(score=>[paperGrade(score.rows[i][2]),paperGrade(score.rows[i][1])])]);
+  if(view.plan.items.some(item=>!item.choices))rows.push(['المجموع الكلي',...scores.flatMap(score=>[
+    sum(score.subjects.map(subject=>Number(subject.max)||0)),score.complete?score.total:''
+  ])]);
+  return gradePaperTable('درجات التلميذ',head,rows,1+sections.length*2);
+}
+function semesterPaperMarks(view,marks,groups,mode) {
+  const period=mode==='period';
+  const official=mode==='double';
+  const first=gradeSummary(view.plan,view.source,marks,[0]);
+  const second=gradeSummary(view.plan,view.source,marks,[1]);
+  const third=gradeSummary(view.plan,view.source,marks,[2]);
+  const fourth=gradeSummary(view.plan,view.source,marks,[3]);
+  const annual=gradeSummary(view.plan,view.source,marks);
+  const perSemester=gradePaperScores(view,marks,period?groups:gradeReportPeriods(view.source,view.plan));
+  const parts=[first,second,third,fourth];
+  const maxTotal=score=>sum(score.subjects.map(subject=>subject.max));
+  const markTotal=score=>score.complete?score.total:'';
+  const subjectValues=(score,i)=>[score.subjects[i].max,paperGrade(score.subjects[i].mark)];
+  const pair=score=>[maxTotal(score),markTotal(score)];
+  const headCell=(label,span=1)=>`<th${span>1?' colspan="'+span+'" scope="colgroup"':''}>${esc(label)}</th>`;
+  const multilineHead=(labels,leading='المادة')=>`<tr><th rowspan="2" scope="col">${leading}</th>${
+    labels.map(([label,width])=>headCell(label,width)).join('')}</tr>`;
+  if(period){
+    const [work,exam]=groups[0].indices.map(index=>parts[index]);
+    const label=groups[0].label, scores=[work,exam,perSemester[0]];
+    const head=multilineHead([['أعمال السنة · '+label,2],['امتحان نهاية '+label,2],['مجموع درجات '+label,2]])+
+      '<tr>'+scores.map(()=>'<th>الدرجة الكبرى</th><th>درجة التلميذ</th>').join('')+'</tr>';
+    const rows=view.plan.items.map((item,i)=>[item.label,...scores.flatMap(score=>subjectValues(score,i))]);
+    rows.push(['المجموع الكلي',...scores.flatMap(pair)]);
+    return gradePaperTable('درجات التلميذ في '+label,head,rows,7);
+  }
+  const minimum=(item,i)=>{
+    if(item.minTotal!=null)return item.minTotal;
+    const rule=(view.school||school()).gradingRules?.[yearKey(view.f.year,view.f.cls,view.f.stream||'')];
+    return rule?.enabled?Math.round(annual.subjects[i].max*rule.subject/10)/10:'';
+  };
+  if(official){
+    const head=`<tr><th rowspan="3" scope="col">المواد الدراسية المقررة</th><th rowspan="3" scope="col">عدد الحصص</th>
+      <th colspan="4" scope="colgroup">الفصل الدراسي الأول</th><th colspan="4" scope="colgroup">الفصل الدراسي الثاني</th>
+      <th colspan="3" scope="colgroup">النهائيات</th></tr><tr>${
+      ['أعمال','امتحان','أعمال','امتحان'].map(label=>headCell(label,2)).join('')}<th rowspan="2">الكبرى</th><th rowspan="2">الصغرى</th><th rowspan="2">مجموع الفصلين</th></tr>
+      <tr>${parts.map(()=>'<th>الكبرى</th><th>الدرجة</th>').join('')}</tr>`;
+    const rows=view.plan.items.map((item,i)=>[item.label,item.weeklyPeriods??'',...parts.flatMap(score=>subjectValues(score,i)),
+      annual.subjects[i].max,minimum(item,i),paperGrade(annual.subjects[i].mark)]);
+    rows.push(['المجموع الكلي','',...parts.flatMap(pair),maxTotal(annual),'',markTotal(annual)]);
+    return gradePaperTable('بيان الدرجات النهائي',head,rows,13);
+  }
+  const head=`<tr><th rowspan="2" scope="col">المادة</th><th rowspan="2" scope="col">التفاصيل</th>
+    <th colspan="2" scope="colgroup">الدرجة الكبرى</th><th colspan="2" scope="colgroup">درجة التلميذ</th>
+    <th colspan="2" scope="colgroup">النهائيات</th><th rowspan="2" scope="col">مجموع الفصلين</th></tr>
+    <tr><th>الفصل الأول</th><th>الفصل الثاني</th><th>الفصل الأول</th><th>الفصل الثاني</th><th>الكبرى</th><th>الصغرى</th></tr>`;
+  const body=view.plan.items.map((item,i)=>{
+    const rows=[[0,2,'أعمال السنة'],[1,3,'الامتحان']].map(([a,b,label],index)=>`<tr>${
+      index?'':'<td rowspan="2">'+esc(item.label)+'</td>'}<td>${label}</td>${
+      [parts[a].subjects[i].max,parts[b].subjects[i].max,paperGrade(parts[a].subjects[i].mark),paperGrade(parts[b].subjects[i].mark)].map(value=>'<td>'+esc(value)+'</td>').join('')}${
+      index?'':[annual.subjects[i].max,minimum(item,i),paperGrade(annual.subjects[i].mark)].map(value=>'<td rowspan="2">'+esc(value)+'</td>').join('')}</tr>`);
+    return rows.join('');
+  }).join('');
+  const totals=[maxTotal(perSemester[0]),maxTotal(perSemester[1]),markTotal(perSemester[0]),markTotal(perSemester[1]),maxTotal(annual),'',markTotal(annual)];
+  return `<table class="school-paper-table grade-marks grade-annual-marks" aria-label="بيان الدرجات النهائي"><thead>${head}</thead>
+    <tbody>${body}<tr><td colspan="2">المجموع الكلي</td>${totals.map(value=>'<td>'+esc(value)+'</td>').join('')}</tr></tbody></table>`;
+}
+function gradeActivityGroups(view,groups) {
+  if(view.source==='add_kindergarten_grades'||view.source==='add_activity_grades')return [];
+  const count=gradePlan('add_activity_grades',view.f.cls,view.f.stream,view.f.year).components.length;
+  return groups.map(group=>({...group,activityIndex:view.plan.components.length===4?Math.floor(group.indices[0]/2):group.indices[0]}))
+    .filter(group=>group.activityIndex<count);
+}
+function gradePaperActivity(view,student,activityGroups,marks) {
   const activity=gradePlan('add_activity_grades',student.cls,student.stream,student.year);
-  const grades=(view.school||school()).grades[student.id]||{};
-  const periodGroups=groups.filter(group=>group.indices);
-  const rows=activity.items.filter(item=>item.choices).map(item=>[item.label,...periodGroups.map(group=>{
-    const i=activity.components.length===2&&view.plan.components.length===4?Math.floor(group.indices[0]/2):group.indices[0];
-    return grades[gradeKey('add_activity_grades',item.key,i)]??'—';
-  })]);
-  return paperTable(['مواد النشاط',...periodGroups.map(group=>'أداء التلميذ خلال '+group.label.split(' (')[0])],rows);
+  const rows=activity.items.filter(item=>item.choices).map(item=>[item.label,...activityGroups.map(group=>
+    paperGrade(marks[gradeKey('add_activity_grades',item.key,group.activityIndex)]))]);
+  return paperTable(['مواد النشاط',...activityGroups.map(group=>'أداء التلميذ خلال '+group.label)],rows);
 }
-function gradePaperSide(view,summary,groups,period) {
-  const s=summary.s, columns=[['اسم التلميذ',s.name],['رقم القيد',s.reg],['الصف',s.cls],['الفصل',s.section],...(s.stream?[['التخصص',s.stream]]:[])];
-  const details=`<div class="paper-student">${studentAvatar(s,true)}<dl>${columns.map(([label,value])=>'<dt>'+label+'</dt><dd>'+esc(value||'—')+'</dd>').join('')}</dl></div>`;
-  const data=(view.school||school()).grades[s.id]||{};
-  const activityGroups=groups.filter(group=>group.indices);
-  const counts=key=>activityGroups.map(group=>{
-    const i=view.plan.components.length===4?Math.floor(group.indices[0]/2):group.indices[0];
-    return data[gradeKey('add_activity_grades',key,i)]??'—';
-  });
-  const summaryTable=period?paperTable(['ملاحظات على أداء التلميذ خلال '+activityGroups[0].label],[['']]):paperTable(['النتيجة النهائية'],[[summary.status||'—'],[summary.percent===null?'—':summary.percent+'%']]);
-  return summaryTable+details+paperTable(['الغياب',...activityGroups.map(group=>group.label.split(' (')[0])],[['مشروع (أيام)',...counts('ex')],['غير مشروع (أيام)',...counts('un')]]);
+function gradePaperFields(summary) {
+  const student=summary.s;
+  const fields=[['اسم التلميذ',student.name],['رقم القيد',student.reg],['الصف',student.cls],['الفصل',student.section],
+    ...(student.stream?[['التخصص',student.stream]]:[])];
+  return `<div class="paper-student">${studentAvatar(student,true)}<dl>${fields.map(([label,value])=>
+    '<dt>'+esc(label)+'</dt><dd>'+esc(value||'')+'</dd>').join('')}</dl></div>`;
+}
+function gradePaperStatus(summary,period=false) {
+  const ratio=summary.max>0?100*summary.total/summary.max:summary.percent;
+  return paperTable([period?'نتيجة الفترة':'النتيجة النهائية للتلميذ',''],[
+    ['الحالة',summary.status||''],['النسبة',summary.percent===null?'':summary.percent+'%'],
+    ['التقدير',summary.percent===null?'':gradeRating(ratio)]
+  ]);
+}
+function gradePaperSignatures(groups,certificate=false) {
+  const roles=certificate?['إعداد ومراجعة الدرجات','مدير المدرسة','ولي أمر التلميذ']:['معلم الفصل','مدير المدرسة','ولي أمر التلميذ'];
+  return paperTable(['التوقيعات',...groups.map(group=>group.label)],
+    roles.map(role=>[role,...groups.map(()=> '')]));
 }
 function gradeCardReport(view,title,summaries,indices,type) {
-  const groups=gradePaperPeriods(view,indices);
-  const year=view.f.year;
-  const heading=type==='period'?'بطاقة تقدير درجات '+groups[0].label+' للعام الدراسي '+year+' م':
-    type==='final'?'بطاقة تقدير الدرجات للعام الدراسي '+year+' م':title+' للعام الدراسي '+year+' م';
-  const settings={cellPadding:view.plan.items.length>10?4:7};
-  const profile=(view.school||school()).profile;
+  const schoolData=view.school||school(), {year}=view.f;
+  const gradeScope={...view.f,cls:view.f.cls||summaries[0]?.s.cls,stream:view.f.stream||summaries[0]?.s.stream};
+  view={...view,f:gradeScope,school:schoolData};
+  const allGroups=gradeReportPeriods(view.source,view.plan);
+  const groups=indices?allGroups.filter(group=>group.indices.every(index=>indices.includes(index))):allGroups;
+  const activityGroups=gradeActivityGroups(view,groups);
+  const semester=view.plan.components.length===4;
+  const heading=type==='period'?'بطاقة تقدير درجات · '+groups[0].label+' · '+year:
+    type==='final'?'بطاقة تقدير درجات · '+(view.f.cls?.includes('ثانوي')?'مرحلة التعليم الثانوي':'مرحلة التعليم الأساسي')+' · '+year:title+' · '+year;
+  const portrait=(caption,body,student,official=false)=>paperFrame(caption,year,body,{
+    variant:official?'grades-official':'grades',profile:schoolData.profile,settings:{
+      font:official?'Simplified Arabic':'Cairo',cellPadding:official||view.plan.items.length>10||semester?3:6
+    },signatures:false,authorityLine:official&&view.plan.certificate?'المركز الوطني للامتحانات':'',
+    meta:student?'الصف '+esc(student.cls)+(student.stream?' · '+esc(student.stream):''):''
+  });
+  const layout=(main,side)=>`<div class="grade-paper-grid"><div class="grade-paper-main">${main}</div><div class="grade-paper-side">${side}</div></div>`;
   const markup=summaries.map(summary=>{
-    const marks=gradePaperMarks(view,summary.s,groups);
-    const activity=['add_grades','student-grades-sse','student-grades-first-secondary','student-grades-second-secondary'].includes(view.source)?gradePaperActivity(view,summary.s,groups):'';
-    const side=gradePaperSide(view,summary,groups,indices!==null);
-    const sign=paperTable(['التوقيعات',...(indices?[groups[0].label]:[])],[['معلم الفصل',...(indices?['']:[])],['مدير المدرسة',...(indices?['']:[])],['ولي أمر التلميذ',...(indices?['']:[])]]);
-    const body=type==='double'?`<div class="grade-paper-grid"><div class="grade-paper-main">${activity}${sign}</div><div class="grade-paper-side">${side}</div></div>`:
-      `<div class="grade-paper-grid"><div class="grade-paper-main">${marks}${activity}${sign}</div><div class="grade-paper-side">${side}</div></div>`;
-    const page=paperFrame(heading,year,body,{variant:'grades',profile,settings,signatures:false});
-    return type==='double'?page+paperFrame('بيان الدرجات · الوجه الخلفي',year,marks,{variant:'grades',profile,settings,meta:esc(summary.s.name)+' · '+esc(summary.s.reg),signatures:false}):page;
-  }).join('')||paperFrame(heading,year,notice('لا توجد سجلات مطابقة.'),{variant:'grades',profile});
-  showDocument(title,[],[],markup,'عمودي');
+    const student=summary.s, marks=schoolData.grades[student.id]||{};
+    const marksTable=semester?semesterPaperMarks(view,marks,groups,type):gradePaperMarks(view,marks,groups,{yearTotal:!indices});
+    const activity=activityGroups.length?gradePaperActivity(view,student,activityGroups,marks):'';
+    const absences=activityGroups.length?paperTable(['الغياب',...activityGroups.map(group=>group.label)],
+      [['ex','غياب مشروع (أيام)'],['un','غياب غير مشروع (أيام)']].map(([key,label])=>
+        [label,...activityGroups.map(group=>paperGrade(marks[gradeKey('add_activity_grades',key,group.activityIndex)]))])):'';
+    const sign=gradePaperSignatures(activityGroups.length?activityGroups:groups,view.plan.certificate);
+    const note=`<div class="grade-paper-note"><strong>ملاحظات على أداء التلميذ${type==='period'?' خلال '+esc(groups[0].label):''}</strong>
+      <span></span><span></span><span></span></div>`;
+    const important=activity?'<p class="grade-paper-caption"><strong>ملاحظات هامة</strong><br>تقديرات مواد النشاط: مقبول، جيد، جيد جداً، ممتاز.</p>':'';
+    const side=gradePaperFields(summary)+gradePaperStatus(summary,type==='period')+absences;
+    if(type==='double'){
+      const behavior=paperTable(['السلوك',...activityGroups.map(group=>group.label)],
+        ['السلوك والانضباط','المواظبة'].map(label=>[label,...activityGroups.map(()=> '')]));
+      const front=portrait('صحيفة النتيجة النهائية · '+year,marksTable+activity,student,true);
+      const back=portrait('بيانات التلميذ واعتماد النتيجة · '+year,layout(note+behavior+sign+important,side),student,true);
+      return front+back;
+    }
+    return portrait(heading,layout(marksTable+activity+sign,side+note+important),student);
+  }).join('')||portrait(heading,notice('لا توجد سجلات مطابقة.'));
+  showDocument(title,[],[],markup,'عمودي',null,{fixed:true});
+}
+
+function gradeReviewReport(view) {
+  const {source,plan,f,all}=view;
+  const groups=gradeReportPeriods(source,plan), semester=plan.components.length===4;
+  const subheads=semester?['أعمال','امتحان','المجموع']:['الدرجة'];
+  const headings='<tr><th rowspan="'+(semester?2:1)+'">الفصل / الفترة</th>'+
+    [...plan.items.map(item=>item.label),'مجموع الدرجات'].map(label=>`<th colspan="${subheads.length}">${esc(label)}</th>`).join('')+'</tr>'+
+    (semester?'<tr>'+Array.from({length:plan.items.length+1},()=>subheads.map(label=>'<th>'+label+'</th>').join('')).join('')+'</tr>':'');
+  const grid=(student,title)=>{
+    const marks=student?(view.school||school()).grades[student.id]||{}:{};
+    const displayed=(score,i)=>student?(i===plan.items.length?(score.complete?score.total:''):paperGrade(score.subjects[i].mark)):
+      (i===plan.items.length?sum(score.subjects.map(item=>Number(item.max)||0)):paperGrade(score.subjects[i].max));
+    const rows=groups.map(({label,indices})=>{
+      const scores=gradePaperScores(view,marks,[...indices.map(i=>({indices:[i]})),...(semester?[{indices}]:[])]);
+      return [label,...Array.from({length:plan.items.length+1},(_,i)=>scores.map(score=>displayed(score,i))).flat()];
+    });
+    if(student&&!gradeSummary(plan,source,marks).complete)title+=' · الرصد غير مكتمل';
+    return '<section class="grade-review-block"><h3>'+esc(title)+'</h3>'+
+      gradePaperTable(title,headings,rows,1+(plan.items.length+1)*subheads.length,'grade-review-grid')+'</section>';
+  };
+  const title='تقرير المراجعة', perPage=5, pages=Math.max(1,Math.ceil(all.length/perPage));
+  const maxima=grid(null,'الدرجات الكبرى');
+  const meta=[f.cls,f.stream,f.section].filter(Boolean).map(part=>'<span>'+esc(part)+'</span>').join('');
+  const markup=Array.from({length:pages},(_,page)=>{
+    const body=all.slice(page*perPage,(page+1)*perPage).map((student,i)=>
+      grid(student,(page*perPage+i+1)+' · '+student.name+' · رقم القيد '+student.reg+(student.section?' · '+student.section:''))).join('');
+    return paperFrame(title,f.year,maxima+(body||notice('لا توجد سجلات مطابقة.')),{
+      variant:'grade-review',settings:{font:'Calibri',fontSize:10,cellPadding:1},meta,signatures:false,page:page+1,pages
+    });
+  }).join('');
+  const file=gradeRows(view);
+  showDocument(title,file.headers,file.rows,markup,'أفقي',null,{paperSize:'A3',margin:2,fixed:true});
 }
 function studentReportMenu(){return `<div class="grid2">${[
   ['طباعة بطاقات تعريف التلاميذ','id-cards'],['طباعة إفادة حسن السيرة','conduct'],['طباعة تعريف مدرسي','enrollment'],
   ['طباعة تعهد لتلميذ','pledge'],['طباعة بطاقة بيانات الطلبة','profiles']
-].map(([label,id])=>btn(label,'student-doc',id,'outline-blue')).join('')}${btn('إفادة استمرارية الدراسة','continuity-request','','outline-blue')}${btn('كشف استمرارية الدراسة','continuity-roster','','outline-blue')}${btn('طباعة إحصائية الطلبة','student-stats','','outline-blue')}${btn('طباعة كشف الأجانب فقط','student-print','foreign','outline-blue')}${link('طباعة كشف استلام الكتب','books-receipt','soft')}</div>`;}
+].map(([label,id])=>btn(label,'student-doc',id,'outline-blue')).join('')}${btn('إفادة استمرارية الدراسة','continuity-request','','outline-blue')}${btn('كشف استمرارية الدراسة','continuity-roster','','outline-blue')}${btn('طباعة إحصائية الطلبة','student-stats','','outline-blue')}${btn('طباعة كشف الأجانب فقط','student-print','foreign','outline-blue')}${session?.role==='admin'?btn('طباعة كشف طلبة الفئات الخاصة','student-print','special','outline-blue'):''}${link('طباعة كشف استلام الكتب','books-receipt','soft')}</div>`;}
 actions['student-report-menu']=()=>showDialog('أدوات الطباعة والتقارير',studentReportMenu());
 const STUDENT_DOCS={
   'id-cards':['بطاقة تعريف تلميذ',''],
@@ -119,6 +258,28 @@ const STUDENT_DOCS={
   'enrollment':['تعريف مدرسي','تشهد إدارة المدرسة بأن الطالب المذكور مقيد لديها في السنة الدراسية الموضحة.'],
   'pledge':['تعهد تلميذ','أتعهد بالالتزام بنظام المدرسة واحترام مواعيد الدوام والمحافظة على الممتلكات. توقيع الطالب: __________ توقيع ولي الأمر: __________'],
   'profiles':['بطاقة بيانات طالب','']
+};
+actions['student-paper-menu']=id=>{
+  const student=lookup('students',id);
+  showDialog('تقارير · '+student.name,`<div class="report-buttons">${Object.entries(STUDENT_DOCS).map(([kind,[label]])=>
+    btn(label,'student-doc',kind+'|'+id,'outline-blue')).join('')}${btn('استدعاء ولي أمر تلميذ','student-guardian-letter',id,'outline-blue')}</div>`);
+};
+actions['student-guardian-letter']=id=>{
+  const student=lookup('students',id);
+  showDialog('استدعاء ولي أمر تلميذ',`<form class="stack" data-form="student-guardian-letter" data-id="${esc(id)}">
+    <p>${esc(student.name)}</p><div class="fields tight">
+    ${field(['date','تاريخ الموعد','date'])}${field(['time','وقت الموعد','time'])}
+    ${field(['reason','موضوع اللقاء','text'],'',{maxlength:160})}</div>${submit('معاينة الاستدعاء')}</form>`);
+};
+forms['student-guardian-letter']=(data,form)=>{
+  const student=lookup('students',form.dataset.id), title='استدعاء ولي أمر تلميذ';
+  if(data.date)attendanceReportDates(data.date,'يومي');
+  const appointment=[data.date,data.time].filter(Boolean).join(' · ')||'....................................';
+  const details=[['اسم التلميذ',student.name],['رقم القيد',student.reg],['الصف',student.cls],['الفصل',student.section],
+    ['الموعد',appointment],['موضوع اللقاء',str(data.reason).slice(0,160)||'....................................']];
+  const body='<div class="paper-continuity-body"><p>السيد المحترم ولي أمر التلميذ</p><p>نرجو حضوركم إلى إدارة المدرسة في الموعد الموضح أدناه.</p>'+
+    paperTable(['البيان','التفاصيل'],details,title)+'</div>';
+  showDocument(title,[],[],paperFrame(title,student.year,body),'عمودي',null,{fixed:true});
 };
 actions['student-doc']=value=>{
   const [kind,id]=value.split('|'), template=STUDENT_DOCS[kind];
