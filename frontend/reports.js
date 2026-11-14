@@ -101,6 +101,7 @@ function semesterPaperMarks(view,marks,groups,mode) {
   const subjectValues=(score,i)=>[score.subjects[i].max,paperGrade(score.subjects[i].mark)];
   const pair=score=>[maxTotal(score),markTotal(score)];
   const headCell=(label,span=1)=>`<th${span>1?' colspan="'+span+'" scope="colgroup"':''}>${esc(label)}</th>`;
+  const numberCell=(value,span='')=>`<td${span}><bdi class="grade-paper-number">${esc(value)}</bdi></td>`;
   const multilineHead=(labels,leading='المادة')=>`<tr><th rowspan="2" scope="col">${leading}</th>${
     labels.map(([label,width])=>headCell(label,width)).join('')}</tr>`;
   if(period){
@@ -135,13 +136,13 @@ function semesterPaperMarks(view,marks,groups,mode) {
   const body=view.plan.items.map((item,i)=>{
     const rows=[[0,2,'أعمال السنة'],[1,3,'الامتحان']].map(([a,b,label],index)=>`<tr>${
       index?'':'<td rowspan="2">'+esc(item.label)+'</td>'}<td>${label}</td>${
-      [parts[a].subjects[i].max,parts[b].subjects[i].max,paperGrade(parts[a].subjects[i].mark),paperGrade(parts[b].subjects[i].mark)].map(value=>'<td>'+esc(value)+'</td>').join('')}${
-      index?'':[annual.subjects[i].max,minimum(item,i),paperGrade(annual.subjects[i].mark)].map(value=>'<td rowspan="2">'+esc(value)+'</td>').join('')}</tr>`);
+      [parts[a].subjects[i].max,parts[b].subjects[i].max,paperGrade(parts[a].subjects[i].mark),paperGrade(parts[b].subjects[i].mark)].map(value=>numberCell(value)).join('')}${
+      index?'':[annual.subjects[i].max,minimum(item,i),paperGrade(annual.subjects[i].mark)].map(value=>numberCell(value,' rowspan="2"')).join('')}</tr>`);
     return rows.join('');
   }).join('');
   const totals=[maxTotal(perSemester[0]),maxTotal(perSemester[1]),markTotal(perSemester[0]),markTotal(perSemester[1]),maxTotal(annual),'',markTotal(annual)];
   return `<table class="school-paper-table grade-marks grade-annual-marks" aria-label="بيان الدرجات النهائي"><thead>${head}</thead>
-    <tbody>${body}<tr><td colspan="2">المجموع الكلي</td>${totals.map(value=>'<td>'+esc(value)+'</td>').join('')}</tr></tbody></table>`;
+    <tbody>${body}<tr><td colspan="2">المجموع الكلي</td>${totals.map(value=>numberCell(value)).join('')}</tr></tbody></table>`;
 }
 function gradeActivityGroups(view,groups) {
   if(view.source==='add_kindergarten_grades'||view.source==='add_activity_grades')return [];
